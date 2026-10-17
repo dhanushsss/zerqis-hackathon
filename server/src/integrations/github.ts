@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { config } from '../config.js';
 import { redactSecrets } from '../analysis/redact.js';
+import { PRODUCT_NAME } from '../brand.js';
 
 export class GitHubError extends Error {
   constructor(message: string, readonly status?: number, readonly hint?: string) {
@@ -51,7 +52,7 @@ export class GitHubClient {
   }
 
   private headers(accept = 'application/vnd.github+json'): Record<string, string> {
-    const h: Record<string, string> = { Accept: accept, 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'alibi-ci-forensics' };
+    const h: Record<string, string> = { Accept: accept, 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': `${PRODUCT_NAME.toLowerCase()}-ci` };
     if (this.token) h.Authorization = `Bearer ${this.token}`;
     return h;
   }
@@ -121,8 +122,11 @@ export class GitHubClient {
     return (body.artifacts ?? []).map((a) => ({ name: a.name, sizeInBytes: a.size_in_bytes, expired: a.expired }));
   }
 
-  /** Downloads a job's plain-text log. Follows the signed redirect without forwarding the token. */
-  async jobLog(owner: string, repo: string, jobId: number, maxBytes = 8 * 1024 * 1024): Promise<string> {
+  /**
+   * Downloads a job's plain-text log. Follows the signed redirect without forwarding the token.
+   * The log is redacted before it is returned; `redactions` reports how many values were removed.
+   */
+  async jobLog(owner: string, repo: string, jobId: number, maxBytes = 8 * 1024 * 1024): Promise<{ text: string; redactions: number }> {
     const path = `/repos/${owner}/${repo}/actions/jobs/${jobId}/logs`;
     const res = await this.raw(path);
     let text: string;
@@ -138,7 +142,8 @@ export class GitHubClient {
       throw new GitHubError(`GitHub ${res.status} on ${path}`, res.status, hintFor(res.status, path));
     }
     if (text.length > maxBytes) text = `[log truncated to last ${maxBytes} bytes]\n${text.slice(-maxBytes)}`;
-    return redactSecrets(text).text;
+    const red = redactSecrets(text);
+    return { text: red.text, redactions: red.count };
   }
 
   getCommit(owner: string, repo: string, sha: string) {

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Experiment, Investigation } from '../api';
+import { BRAND } from '../brand';
 
 // ------------------------------------------------------------------ icons
 const P = (d: string) => <path d={d} />;
@@ -15,6 +16,7 @@ const ICONS: Record<string, ReactNode> = {
     </>
   ),
   play: P('M7 4v16l13-8z'),
+  pause: P('M8 5v14M16 5v14'),
   refresh: P('M21 12a9 9 0 1 1-3-6.7L21 8m0-5v5h-5'),
   trash: P('M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14'),
   download: P('M12 3v12m0 0-4-4m4 4 4-4M4 21h16'),
@@ -147,6 +149,53 @@ export function Icon({ name, className, label }: { name: string; className?: str
   );
 }
 
+// ------------------------------------------------------------------ brand
+/** The Zerqis mark: a Z whose path ends in a verified point. Same drawing as /favicon.svg. */
+export function Logo({ size = 24, className }: { size?: number; className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" width={size} height={size} className={className} aria-hidden="true" focusable="false">
+      <rect width="32" height="32" rx="8" fill="var(--logo-tile, #0d1311)" />
+      <path d="M10 10.5h12L10 21.5h8" fill="none" stroke="var(--logo-stroke, #fff)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="22.4" cy="21.5" r="2.3" fill="var(--logo-dot, #10b981)" />
+    </svg>
+  );
+}
+
+/** Mark plus product name. The name comes from brand.ts. */
+export function Wordmark({ size = 24, className = '' }: { size?: number; className?: string }) {
+  return (
+    <span className={`wordmark ${className}`}>
+      <Logo size={size} />
+      <span className="wordmark-name">{BRAND.name}</span>
+    </span>
+  );
+}
+
+/** True when the user asked the OS to minimise motion. */
+export function usePrefersReducedMotion(): boolean {
+  const query = '(prefers-reduced-motion: reduce)';
+  const [reduced, setReduced] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(query).matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia(query);
+    const on = () => setReduced(mq.matches);
+    mq.addEventListener?.('change', on);
+    return () => mq.removeEventListener?.('change', on);
+  }, []);
+  return reduced;
+}
+
+/** Sets document.title for the lifetime of the calling page. */
+export function useDocumentTitle(title: string) {
+  useEffect(() => {
+    const prev = document.title;
+    document.title = title;
+    return () => {
+      document.title = prev;
+    };
+  }, [title]);
+}
+
 // ------------------------------------------------------------------ motion
 /**
  * True for a short moment after `value` changes in a way `shouldFlash` accepts.
@@ -217,7 +266,8 @@ export function StatusBadge({ status }: { status: Investigation['status'] }) {
   const map: Record<string, [string, string, string]> = {
     queued: ['tone-neutral', 'pending', 'Queued'],
     running: ['tone-info', 'loader', 'Running'],
-    completed: ['tone-pass', 'ok', 'Completed'],
+    // Finishing a run is not a verified outcome; green is reserved for confirmed causes and validated fixes.
+    completed: ['tone-outline', 'check', 'Completed'],
     inconclusive: ['tone-warn', 'unsure', 'Inconclusive'],
     failed: ['tone-fail', 'fail', 'Failed'],
   };
@@ -451,7 +501,8 @@ export function CopyButton({ text, label = 'Copy', className = 'btn btn-sm' }: {
     setTimeout(() => setState('idle'), 1600);
   };
   return (
-    <button type="button" className={className} onClick={copy} aria-live="polite">
+    // Icon-only variants (empty label) still need an accessible name.
+    <button type="button" className={className} onClick={copy} aria-live="polite" aria-label={label ? undefined : state === 'ok' ? 'Copied' : 'Copy to clipboard'}>
       <Icon name={state === 'ok' ? 'check' : 'copy'} />
       {state === 'ok' ? 'Copied' : state === 'err' ? 'Copy failed' : label}
     </button>

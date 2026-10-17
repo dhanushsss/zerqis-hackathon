@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
@@ -58,13 +58,13 @@ const renderAt = (path: string) => render(<MemoryRouter initialEntries={[path]}>
 
 describe('dashboard', () => {
   it('renders real overview totals', async () => {
-    renderAt('/');
+    renderAt('/overview');
     expect(await screen.findByText('17 sandboxed test runs')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();
   });
 
   it('navigates between every primary section', async () => {
-    renderAt('/');
+    renderAt('/overview');
     const nav = screen.getByRole('navigation', { name: 'Main' });
     fireEvent.click(within(nav).getByText('Investigations'));
     expect(await screen.findByRole('heading', { name: 'Investigations' })).toBeInTheDocument();
@@ -133,13 +133,25 @@ describe('dashboard', () => {
   });
 
   it('toggles the compact navigation drawer', async () => {
-    renderAt('/');
+    renderAt('/overview');
     const btn = screen.getByRole('button', { name: 'Open navigation' });
     expect(btn).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(btn);
     expect(btn).toHaveAttribute('aria-expanded', 'true');
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(btn).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('serves the public landing page at / and the app shell everywhere else', async () => {
+    vi.stubGlobal('scrollTo', vi.fn()); // jsdom does not implement scrolling
+    renderAt('/');
+    expect(screen.getByRole('heading', { level: 1, name: "Don't just explain the failure. Prove it." })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    cleanup();
+    renderAt('/no-such-page');
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to overview' })).toHaveAttribute('href', '/overview');
   });
 
   it('shows a clear error state when the API fails', async () => {

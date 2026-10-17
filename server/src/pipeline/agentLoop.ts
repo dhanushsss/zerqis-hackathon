@@ -94,6 +94,14 @@ export function actionKey(a: ApprovedAction): string {
 
 const FORBIDDEN_ARG = /^(command|cmd|shell|script|exec|args|argv|path|file|env|image|network|sha)$/i;
 
+/** The only argument names each allowlisted tool accepts. */
+const ALLOWED_ARGS: Record<string, string[]> = {
+  reproduce: ['commit', 'test'],
+  run_test: ['commit', 'test'],
+  repeat: ['commit', 'test', 'runs'],
+  search: ['query'],
+};
+
 /** Deterministic policy. Returns the approved action or the reason it was rejected. */
 export function validateAction(
   proposal: NonNullable<NextActionOutput['action']>,
@@ -105,6 +113,11 @@ export function validateAction(
   const args = (proposal.args ?? {}) as Record<string, unknown>;
   const forbidden = Object.keys(args).filter((k) => FORBIDDEN_ARG.test(k));
   if (forbidden.length) return { ok: false, reason: `Arguments not accepted (commands, paths, and environment are never taken from the model): ${forbidden.join(', ')}` };
+  // Unknown fields are rejected rather than silently dropped, so a request for something the
+  // policy cannot grant (environment, working directory, timeouts...) never runs in a weaker form.
+  const allowed = ALLOWED_ARGS[tool];
+  const unknown = allowed ? Object.keys(args).filter((k) => !allowed.includes(k)) : [];
+  if (unknown.length) return { ok: false, reason: `Unknown argument(s) for ${tool}: ${unknown.map((k) => k.slice(0, 30)).join(', ')} (allowed: ${allowed!.join(', ')}).` };
 
   if (tool === 'search') {
     if (!ctx.searchEnabled) return { ok: false, reason: 'Search is not available (Tavily is not configured).' };
@@ -272,10 +285,13 @@ export type DiagnosisOutcome = 'CONFIRMED' | 'PROBABLE' | 'INCONCLUSIVE' | 'BLOC
 export type FixOutcome = 'VERIFIED' | 'REJECTED' | 'NONE';
 
 export function diagnosisOutcome(verdict: Verdict | null, opts: { sandboxRan: boolean; stopReason: StopReason | null }): DiagnosisOutcome {
+  // No sandbox run means no experimental evidence could be obtained: whatever the verdict
+  // text says, the diagnosis was blocked, not established.
+  if (!opts.sandboxRan) return 'BLOCKED';
   if (verdict === 'confirmed') return 'CONFIRMED';
   if (verdict === 'probable') return 'PROBABLE';
-  // Inconclusive because evidence could not be gathered at all, not because it was ambiguous.
-  if (!opts.sandboxRan || opts.stopReason === 'policy_blocked') return 'BLOCKED';
+  // Inconclusive because every proposed experiment was refused, not because results were ambiguous.
+  if (opts.stopReason === 'policy_blocked') return 'BLOCKED';
   return 'INCONCLUSIVE';
 }
 

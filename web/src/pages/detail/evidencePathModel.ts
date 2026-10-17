@@ -138,7 +138,7 @@ export function buildEvidencePath(b: Bundle): EvidencePathModel {
       column: 'failure',
       kind: 'log',
       refId: inv.id,
-      title: 'CI failure',
+      title: inv.source === 'change' ? 'Test result at the changed revision' : 'CI failure',
       summary: inv.failureSignature ?? 'Signature not extracted yet',
       state: 'observed',
     },

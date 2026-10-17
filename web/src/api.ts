@@ -26,7 +26,7 @@ export interface Scenario {
   title: string;
   summary: string;
   repository: string;
-  framework: 'jest' | 'maven';
+  framework: 'jest' | 'maven' | 'pytest';
   job: string;
   replayRecordedAt: string | null;
   expected?: { experiments: string[] };
@@ -106,6 +106,10 @@ export const api = {
     request<Investigation>('/api/investigations/demo', { method: 'POST', body: JSON.stringify({ scenarioId, mode, repeat }) }),
   startGitHub: (runUrl: string, mode: string) =>
     request<Investigation & { duplicate?: boolean }>('/api/investigations/github', { method: 'POST', body: JSON.stringify({ runUrl, mode }) }),
+  /** Change verification: exactly one of investigationId, scenarioId, or repoUrl; base/head are commit SHAs. */
+  startVerification: (body: { investigationId?: string; scenarioId?: string; repoUrl?: string; base?: string; head?: string; mode?: string }) =>
+    request<Investigation>('/api/verifications', { method: 'POST', body: JSON.stringify(body) }),
+  sampleRevisions: (scenarioId: string) => request<Array<{ sha: string; message: string }>>(`/api/scenarios/${encodeURIComponent(scenarioId)}/revisions`),
   rerun: (id: string) => request<Investigation>(`/api/investigations/${encodeURIComponent(id)}/rerun`, { method: 'POST', body: '{}' }),
   remove: (id: string) => request<void>(`/api/investigations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   validatePatch: (patchId: string) => request<Patch>(`/api/patches/${encodeURIComponent(patchId)}/validate`, { method: 'POST', body: '{}' }),

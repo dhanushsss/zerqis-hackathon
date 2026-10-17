@@ -8,9 +8,12 @@ const PATTERNS: Array<[RegExp, string]> = [
   [/\b(AKIA|ASIA)[A-Z0-9]{16}\b/g, '[REDACTED AWS KEY ID]'],
   [/\bxox[abpors]-[A-Za-z0-9-]{10,}\b/g, '[REDACTED SLACK TOKEN]'],
   [/\bsk-[A-Za-z0-9_-]{20,}\b/g, '[REDACTED API KEY]'],
+  [/\bAIza[0-9A-Za-z_-]{30,}/g, '[REDACTED GOOGLE API KEY]'],
+  [/\b(?:sk|rk)_(?:live|test)_[0-9A-Za-z]{16,}\b/g, '[REDACTED STRIPE KEY]'],
+  [/\b(AccountKey=)[A-Za-z0-9+/]{20,}={0,2}/g, '$1[REDACTED]'],
   [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, '[REDACTED JWT]'],
   [/(https?:\/\/)[^\s/:@]+:[^\s/@]+@/g, '$1[REDACTED CREDENTIALS]@'],
-  [/\b(Authorization:\s*(?:Bearer|token|Basic)\s+)[^\s'"]+/gi, '$1[REDACTED]'],
+  [/\b(Authorization:\s*(?:Bearer|token|Basic)\s+)(?!\[REDACTED)[^\s'"]+/gi, '$1[REDACTED]'],
   [
     /\b((?:[A-Z0-9_]*_)?(?:API_?KEY|TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE_KEY|ACCESS_KEY)[A-Z0-9_]*\s*[=:]\s*)(?!\*\*\*|\[REDACTED)("[^"\n]{4,}"|'[^'\n]{4,}'|[^\s'"]{4,})/gi,
     '$1[REDACTED]',

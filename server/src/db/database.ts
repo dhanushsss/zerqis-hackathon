@@ -59,6 +59,10 @@ const MIGRATIONS: string[] = [
 
   CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   `,
+  // 2: remove model-call records left behind by investigations deleted before deletion covered them.
+  `
+  DELETE FROM model_calls WHERE investigation_id IS NOT NULL AND investigation_id NOT IN (SELECT id FROM investigations);
+  `,
 ];
 
 export function openDatabase(file: string): DB {

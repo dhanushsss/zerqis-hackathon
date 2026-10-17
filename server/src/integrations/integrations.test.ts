@@ -74,11 +74,13 @@ describe('GitHub', () => {
       return new Response(`step\nexport TOKEN=ghp_${'q'.repeat(36)}\n`, { status: 200 });
     }) as unknown as typeof fetch;
     const gh = new GitHubClient('gho_secret', 'https://api.github.test', impl);
-    const text = await gh.jobLog('o', 'r', 9);
+    const { text, redactions } = await gh.jobLog('o', 'r', 9);
     expect(seen[0].auth).toBe('Bearer gho_secret');
     expect(seen[1].url).toBe('https://logs.example/blob?sig=1');
     expect(seen[1].auth).toBeUndefined();
     expect(text).not.toContain('ghp_');
+    // Regression (QA F1 count): the count of values removed at download is reported, not lost.
+    expect(redactions).toBe(1);
   });
 
   it('turns permission errors into actionable hints', async () => {

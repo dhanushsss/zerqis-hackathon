@@ -110,6 +110,23 @@ describe('agent loop: policy', () => {
     expect(validateAction(proposal, ctx, freshState(), limits).ok).toBe(false);
   });
 
+  it.each([
+    ['environment', { environment: { NODE_OPTIONS: '--require /tmp/x.js' } }],
+    ['envVars', { envVars: ['A=1'] }],
+    ['variables', { variables: { A: '1' } }],
+    ['cwd', { cwd: '/' }],
+    ['timeout', { timeout: 99999 }],
+  ])('regression (QA C2): rejects the unknown argument %s instead of dropping it', (key, extra) => {
+    const r = validateAction(act('reproduce', { commit: 'failing', test: 'T1', ...extra }), ctx, freshState(), limits);
+    expect(r).toMatchObject({ ok: false, reason: expect.stringContaining(`Unknown argument(s) for reproduce: ${key}`) });
+  });
+
+  it('accepts exactly the documented arguments for each tool', () => {
+    expect(validateAction(act('repeat', { commit: 'parent', test: 'T1', runs: 3 }), ctx, freshState(), limits).ok).toBe(true);
+    expect(validateAction(act('run_test', { commit: 'failing', test: 'T1' }), ctx, freshState(), limits).ok).toBe(true);
+    expect(validateAction(act('reproduce', { test: 'T1', runs: 3 }), ctx, freshState(), limits).ok).toBe(false);
+  });
+
   it('rejects search when Tavily is not configured, and parent when unknown', () => {
     expect(validateAction(act('search', { query: 'guava 21 toStringHelper' }), { ...ctx, searchEnabled: false }, freshState(), limits).ok).toBe(false);
     expect(validateAction(act('reproduce', { commit: 'parent', test: 'T1' }), { ...ctx, hasParent: false }, freshState(), limits).ok).toBe(false);
@@ -213,6 +230,11 @@ describe('outcomes keep diagnosis and fix separate', () => {
     expect(diagnosisOutcome('inconclusive', { sandboxRan: true, stopReason: 'policy_blocked' })).toBe('BLOCKED');
     expect(diagnosisOutcome('inconclusive', { sandboxRan: true, stopReason: 'max_iterations' })).toBe('INCONCLUSIVE');
     expect(diagnosisOutcome('probable', { sandboxRan: true, stopReason: 'stalled' })).toBe('PROBABLE');
+  });
+  it('regression (QA A5): without any sandbox run the diagnosis is BLOCKED whatever the verdict says', () => {
+    for (const verdict of ['confirmed', 'probable', 'inconclusive', null] as const) {
+      expect(diagnosisOutcome(verdict, { sandboxRan: false, stopReason: 'no_allowed_action' })).toBe('BLOCKED');
+    }
   });
 });
 

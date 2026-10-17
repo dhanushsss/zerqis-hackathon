@@ -111,6 +111,27 @@ describe('secret redaction', () => {
     expect(text).toContain('GITHUB_TOKEN: ***');
     expect(count).toBeGreaterThanOrEqual(4);
   });
+
+  it('regression (QA F1 probes): redacts Google API keys, Stripe keys, and Azure storage account keys', () => {
+    const google = `AI${'za'}Sy${'Q1w2E3r4'.repeat(4)}x`;
+    const stripeLive = `sk_${'live'}_${'4eC39HqLyjWDarjtT1zdp7dc'}`;
+    const stripeRestricted = `rk_${'test'}_${'51Hq0aBcDeFgHiJkLmNoPq'}`;
+    const azureKey = `${'Zm9vYmFy'.repeat(8)}==`;
+    const input = [`maps key ${google}`, `charging with ${stripeLive}`, `restricted ${stripeRestricted}`, `DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=${azureKey};EndpointSuffix=core.windows.net`].join('\n');
+    const { text, count } = redactSecrets(input);
+    for (const s of [google, stripeLive, stripeRestricted, azureKey]) expect(text).not.toContain(s);
+    expect(text).toContain('AccountName=acct');
+    expect(text).toContain('AccountKey=[REDACTED]');
+    expect(count).toBe(4);
+  });
+
+  it('regression (QA F1 count): counts each secret once and finds nothing on a second pass', () => {
+    const gh = `ghp_${'a1B2'.repeat(9)}`;
+    const input = [`token ${gh}`, `curl -H "Authorization: Bearer ${'Zz9'.repeat(8)}"`, 'DEPLOY_SECRET="hunter2hunter2"'].join('\n');
+    const first = redactSecrets(input);
+    expect(first.count).toBe(3);
+    expect(redactSecrets(first.text).count).toBe(0);
+  });
 });
 
 describe('diff analysis', () => {

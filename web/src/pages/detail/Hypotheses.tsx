@@ -3,6 +3,14 @@ import type { Bundle, Hypothesis } from '../../api';
 import { Badge, CLASS_LABEL, EXP_KIND, HypStatusBadge, Icon, useChangeFlash } from '../../components/ui';
 import { effectsFor } from './derive';
 
+/** Why the hypothesis stands where it does, in one sentence derived only from recorded effects. */
+function outcomeLine(status: string, s: number, c: number, contradictedBy: string[]): string {
+  if (status === 'supported') return c ? `Survived: ${s} supporting result${s === 1 ? '' : 's'}, ${c} contradicting.` : `Survived: ${s} supporting result${s === 1 ? '' : 's'} and none against it.`;
+  if (status === 'refuted') return contradictedBy.length ? `Rejected: contradicted by ${contradictedBy.join(', ')}.` : 'Rejected in the final assessment; no experiment contradicted it directly.';
+  if (s + c === 0) return 'Unresolved: no experiment has tested it yet.';
+  return `Unresolved: ${s} supporting, ${c} contradicting; the evidence does not decide it.`;
+}
+
 function HypothesisCard({ h, b }: { h: Hypothesis; b: Bundle }) {
   const base = `/investigations/${b.investigation.id}`;
   const effects = effectsFor(b, h.key);
@@ -21,7 +29,7 @@ function HypothesisCard({ h, b }: { h: Hypothesis; b: Bundle }) {
         </Badge>
         <span className="small muted">{CLASS_LABEL[h.category]}</span>
         {primary && (
-          <Badge tone="tone-pass" icon="target">
+          <Badge tone="tone-outline" icon="target">
             Primary
           </Badge>
         )}
@@ -30,6 +38,14 @@ function HypothesisCard({ h, b }: { h: Hypothesis; b: Bundle }) {
       </div>
       <p className="cause" id={`hyp-${h.key}`}>
         {h.cause}
+      </p>
+      <p className={`hyp-outcome ${h.status}`}>
+        {outcomeLine(
+          h.status,
+          s.length,
+          c.length,
+          [...new Set(c.map((e) => b.experiments.find((x) => x.id === e.experimentId)).filter((x) => x).map((x) => EXP_KIND[x!.kind] ?? x!.kind))],
+        )}
       </p>
       <div className="tally" aria-label={`${s.length} supporting and ${c.length} contradicting experiment results`}>
         <span className="s">

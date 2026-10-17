@@ -1,13 +1,17 @@
 import { git } from '../runner/git.js';
+import { GO_REQUIRE_LINE } from '../runner/golang.js';
+import { isRequirementsFile, parseRequirement } from '../runner/python.js';
 
 export interface DependencyChange {
-  ecosystem: 'npm' | 'maven';
+  ecosystem: 'npm' | 'maven' | 'pypi' | 'go';
   name: string;
   from: string | null;
   to: string | null;
   file: string;
   removedLine?: string;
   addedLine?: string;
+  /** Go: go.sum lines for the previous version that this commit removed (needed to pin it back). */
+  previousSums?: string[];
 }
 
 export interface CommitDiff {
@@ -38,10 +42,13 @@ export function analyzeDiff(diff: string, numstat: string, maxChars = 24_000): C
   };
 }
 
-/** Detects dependency version changes in package.json and pom.xml hunks. */
+/** Detects dependency version changes in package.json, pom.xml, root requirements files, and go.mod hunks. */
 export function dependencyChanges(diff: string): DependencyChange[] {
   const out: DependencyChange[] = [];
   const perFile = diff.split(/^diff --git /m).slice(1);
+  const goSumRemoved = perFile
+    .filter((c) => /^a\/go\.sum\s/.test(c))
+    .flatMap((c) => c.split('\n').filter((l) => l.startsWith('-') && !l.startsWith('---')).map((l) => l.slice(1)));
   for (const chunk of perFile) {
     const file = /^a\/(\S+)/.exec(chunk)?.[1] ?? '';
     const removed = chunk.split('\n').filter((l) => l.startsWith('-') && !l.startsWith('---'));
@@ -56,6 +63,40 @@ export function dependencyChanges(diff: string): DependencyChange[] {
         const b = before.get(name);
         const a = after.get(name);
         if (b?.v !== a?.v) out.push({ ecosystem: 'npm', name, from: b?.v ?? null, to: a?.v ?? null, file, removedLine: b?.line, addedLine: a?.line });
+      }
+    } else if (isRequirementsFile(file)) {
+      const parse = (ls: string[]) => {
+        const out = new Map<string, { v: string; line: string }>();
+        for (const l of ls) {
+          const r = parseRequirement(l.slice(1));
+          if (r) out.set(r.name, { v: r.spec.replace(/^===?/, ''), line: l.slice(1) });
+        }
+        return out;
+      };
+      const before = parse(removed);
+      const after = parse(added);
+      for (const name of new Set([...before.keys(), ...after.keys()])) {
+        const b = before.get(name);
+        const a = after.get(name);
+        if (b?.v !== a?.v) out.push({ ecosystem: 'pypi', name, from: b ? b.v || '*' : null, to: a ? a.v || '*' : null, file, removedLine: b?.line, addedLine: a?.line });
+      }
+    } else if (file === 'go.mod') {
+      const parse = (ls: string[]) => {
+        const m = new Map<string, { v: string; line: string }>();
+        for (const l of ls) {
+          const r = GO_REQUIRE_LINE.exec(l);
+          if (r) m.set(r[1], { v: r[2], line: l.slice(1) });
+        }
+        return m;
+      };
+      const before = parse(removed);
+      const after = parse(added);
+      for (const name of new Set([...before.keys(), ...after.keys()])) {
+        const b = before.get(name);
+        const a = after.get(name);
+        if (b?.v === a?.v) continue;
+        const previousSums = b ? goSumRemoved.filter((l) => l.startsWith(`${name} ${b.v} `) || l.startsWith(`${name} ${b.v}/go.mod `)) : undefined;
+        out.push({ ecosystem: 'go', name, from: b?.v ?? null, to: a?.v ?? null, file, removedLine: b?.line, addedLine: a?.line, previousSums });
       }
     } else if (/(^|\/)pom\.xml$/.test(file)) {
       const prop = (ls: string[]) =>

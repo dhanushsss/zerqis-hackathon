@@ -11,7 +11,10 @@ import type {
   Classification,
   EvidenceRef,
   Experiment,
+  ChangeOutcome,
+  ChangeRevisionRun,
   ExperimentKind,
+  Framework,
   Hypothesis,
   Investigation,
   Origin,
@@ -38,17 +41,26 @@ import {
 import { LOOP_SYSTEM, loopPrompt, PATCH_SYSTEM, patchPrompt, patchRetryPrompt, TRIAGE_SYSTEM, triagePrompt, VERDICT_SYSTEM, verdictPrompt, type LoopObservation } from '../llm/prompts.js';
 import { checkDocker } from '../runner/docker.js';
 import type { TestSelection } from '../runner/frameworks.js';
-import { applyPatch, type RepoSource } from '../runner/workspace.js';
+import { checkout, layoutProblem, type RepoSource } from '../runner/workspace.js';
+import { detectFramework, imageFor } from '../runner/frameworks.js';
+import { findGoTestFile } from '../runner/golang.js';
+import { git, gitOk } from '../runner/git.js';
 import { validateSelection } from '../runner/frameworks.js';
 import { demoRepoPath } from '../scenarios/build.js';
 import { getScenario, scenarioLogPath } from '../scenarios/registry.js';
-import { assessConfidence, reconcileVerdict, remediationSummary } from './confidence.js';
+import { assessConfidence, guardHypothesisStatus, reconcileVerdict, remediationSummary } from './confidence.js';
 import { experimentEffect } from './effects.js';
 import { attemptSeed, describeSelection, runTestExperiment, summarizeAttempts, WorkspacePool } from './experiments.js';
 import { heuristicTriage, heuristicVerdict } from './heuristic.js';
 import { isTestFile, materialize, patchContextFiles, pinCandidate, quarantineCandidate, revertCandidate, type CandidateEdit } from './remediation.js';
 import { actionKey, diagnosisOutcome, fixOutcome, runAgentLoop, STOP_REASON_TEXT, type ApprovedAction, type LoopResult, type SelectionOption } from './agentLoop.js';
 import { loadReplay, saveReplay, type ReplayRecording } from './replay.js';
+import { changeFixOutcome, decideFailingChange, decidePassingChange, notTestedFor, parseRepoUrl, resolveRevision, syncRemoteRepo, testScopeConcerns } from './change.js';
+import { PRODUCT_NAME } from '../brand.js';
+
+/** Frameworks with sandbox experiment support. */
+const SANDBOX_FRAMEWORKS: Framework[] = ['jest', 'maven', 'pytest', 'go'];
+const SUPPORTED_TEXT = 'Jest (JavaScript and TypeScript), Maven, pytest, Go';
 
 export interface PipelineDeps {
   store: Store;
@@ -63,6 +75,8 @@ interface Intake {
   diff: CommitDiff | null;
   repoDir: string | null;
   githubRef?: RunRef;
+  /** Values already redacted before the log reached the pipeline (GitHub downloads). */
+  preRedactions?: number;
 }
 
 class Budget {
@@ -119,6 +133,11 @@ export class InvestigationRun {
     try {
       this.stage('Collecting failure evidence');
       this.intake = await this.collect();
+      if (this.changeEarly) {
+        // Change verification that needs no diagnosis: blocked, or no failing test at the changed revision.
+        this.finishChange(this.changeEarly.outcome, this.changeEarly.detail);
+        return;
+      }
       this.prepareMode();
 
       this.stage('Forming hypotheses');
@@ -142,6 +161,7 @@ export class InvestigationRun {
 
       this.stage('Finalizing verdict');
       this.finalize(verdict);
+      if (this.inv.source === 'change') this.finalizeChange();
       if (this.recording && Object.keys(this.recording.steps).length) saveReplay(this.recording);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -163,9 +183,12 @@ export class InvestigationRun {
 
   // ------------------------------------------------------------ 1. collect
   private async collect(): Promise<Intake> {
-    const inv = this.inv;
+    let inv = this.inv;
     let intake: Intake;
-    if (inv.source === 'demo') {
+    if (inv.source === 'change') {
+      intake = await this.collectChange();
+      inv = this.inv;
+    } else if (inv.source === 'demo') {
       const scenario = getScenario(inv.scenarioId!);
       if (!scenario) throw new Error(`Unknown scenario ${inv.scenarioId}`);
       const repoDir = demoRepoPath(scenario.id);
@@ -187,19 +210,22 @@ export class InvestigationRun {
     }
 
     const red = redactSecrets(intake.log);
+    // Values removed at download time count too; the second pass only sees what is left.
+    const redacted = red.count + (intake.preRedactions ?? 0);
     intake.log = red.text;
     this.store.saveLog(this.id, red.text);
     this.facts = extractFacts(red.text, inv.framework);
+    if (inv.source === 'change' && !red.text) this.facts.signature = 'No failing test at the changed revision';
     const excerpts = selectExcerpts(red.text, Math.min(config.nebius.maxInputChars, 60_000));
     this.update({
       failureSignature: this.facts.signature,
       framework: this.facts.framework,
-      logStats: logStats(red.text, excerpts, red.count),
+      logStats: logStats(red.text, excerpts, redacted),
     });
-    if (red.count) {
+    if (redacted) {
       this.evidence({
         kind: 'observed_fact',
-        title: `Redacted ${red.count} secret-like value(s) from the log`,
+        title: `Redacted ${redacted} secret-like value(s) from the log`,
         detail: 'Redaction runs before the log is stored, displayed, or sent to any model.',
         hypothesisKey: null, experimentId: null, sourceId: null, effect: null,
         provenance: { type: 'policy', ref: 'redaction' },
@@ -237,7 +263,7 @@ export class InvestigationRun {
       this.evidence({
         kind: 'observed_fact',
         title: `CI run used Jest seed ${this.facts.jestSeed}`,
-        detail: 'Jest printed the seed for this run (--showSeed). Alibi can replay the exact run with --seed.',
+        detail: `Jest printed the seed for this run (--showSeed). ${PRODUCT_NAME} can replay the exact run with --seed.`,
         hypothesisKey: null, experimentId: null, sourceId: null, effect: null,
         provenance: { type: 'log', lines: at ? [at, at] : undefined },
       });
@@ -280,8 +306,9 @@ export class InvestigationRun {
       );
     }
     let log: string;
+    let preRedactions = 0;
     try {
-      log = await gh.jobLog(owner, repo, job.id);
+      ({ text: log, redactions: preRedactions } = await gh.jobLog(owner, repo, job.id));
     } catch (err) {
       throw new Error(`Could not download logs for job "${job.name}": ${(err as Error).message}${(err as { hint?: string }).hint ? ` — ${(err as { hint?: string }).hint}` : ''}`);
     }
@@ -305,7 +332,216 @@ export class InvestigationRun {
       hypothesisKey: null, experimentId: null, sourceId: null, effect: null,
       provenance: { type: 'github_api', url: job.html_url },
     });
-    return { source: { location: `https://github.com/${owner}/${repo}`, cacheKey: `gh:${owner}/${repo}` }, log, diff, repoDir: null, githubRef: ref };
+    return { source: { location: `https://github.com/${owner}/${repo}`, cacheKey: `gh:${owner}/${repo}` }, log, diff, repoDir: null, githubRef: ref, preRedactions };
+  }
+
+  // ------------------------------------------------------------ change verification
+  private changeEarly: { outcome: ChangeOutcome; detail: string } | null = null;
+  private changeExamined: ChangeRevisionRun[] = [];
+  private changeBaseSuiteId = '';
+
+  /**
+   * Collect stage for a base/head revision pair. Instead of a CI log, the evidence is the full test
+   * suite run at both revisions in the sandbox; the changed revision's output takes the CI log's place
+   * for the ordinary stages that follow. Anything that prevents testing ends the run as "blocked".
+   */
+  private async collectChange(): Promise<Intake> {
+    const inv = this.inv;
+    const c = inv.change!;
+    const empty = (source: RepoSource, repoDir: string | null, diff: CommitDiff | null = null): Intake => ({ source, log: '', diff, repoDir });
+    const block = (detail: string) => {
+      this.changeEarly = { outcome: 'blocked', detail };
+      this.limitations.push(detail);
+    };
+
+    let repoDir: string;
+    let source: RepoSource;
+    if (c.origin.kind === 'sample') {
+      repoDir = demoRepoPath(c.origin.scenarioId);
+      source = { location: repoDir, cacheKey: `demo:${c.origin.scenarioId}` };
+    } else {
+      const ref = parseRepoUrl(c.origin.url);
+      if (!ref) {
+        block(`Unsupported repository URL ${c.origin.url}.`);
+        return empty({ location: '/', cacheKey: 'invalid' }, null);
+      }
+      repoDir = join(config.dataDir, 'change-repos', `${ref.owner}__${ref.repo}`);
+      source = { location: ref.url, cacheKey: `gh:${ref.owner}/${ref.repo}` };
+      try {
+        await syncRemoteRepo(ref.url, repoDir, [c.requested.base, c.requested.head]);
+      } catch (err) {
+        block(`Could not fetch ${ref.url}: ${(err as Error).message.slice(0, 300)}`);
+        return empty(source, null);
+      }
+    }
+
+    const baseSha = await resolveRevision(repoDir, c.requested.base);
+    const headSha = await resolveRevision(repoDir, c.requested.head);
+    const missing = [!baseSha && `base ${c.requested.base}`, !headSha && `head ${c.requested.head}`].filter(Boolean);
+    if (missing.length) {
+      block(`Revision${missing.length > 1 ? 's' : ''} ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} not available in ${inv.repository}. Nothing was checked out or run.`);
+      return empty(source, repoDir);
+    }
+    if (baseSha === headSha) {
+      block('The base and head revisions are the same commit, so there is no change to verify.');
+      return empty(source, repoDir);
+    }
+    const [message, author] = (await git(['log', '-1', '--format=%s%x00%an', headSha!], { cwd: repoDir })).trim().split('\0');
+    this.update({ commitSha: headSha!, parentSha: baseSha!, commitMessage: message || null, commitAuthor: author || null, change: { ...c, baseSha, headSha } });
+    const ancestor = (await gitOk(['merge-base', '--is-ancestor', baseSha!, headSha!], { cwd: repoDir })).ok;
+    this.evidence({
+      kind: 'observed_fact',
+      title: `Verifying change ${baseSha!.slice(0, 12)} → ${headSha!.slice(0, 12)}`,
+      detail: `Base ${baseSha} (requested "${c.requested.base}") and head ${headSha} (requested "${c.requested.head}") resolved in ${inv.repository}.${ancestor ? '' : ' The base is not an ancestor of the head; the diff compares the two trees directly.'}`,
+      hypothesisKey: null, experimentId: null, sourceId: null, effect: null,
+      provenance: { type: 'git', ref: `${baseSha!.slice(0, 12)}..${headSha!.slice(0, 12)}` },
+    });
+    if (!ancestor) this.limitations.push('The base revision is not an ancestor of the head revision.');
+    const diff = await commitDiff(repoDir, baseSha!, headSha!);
+    this.update({ change: { ...this.inv.change!, changedFiles: diff.files, diff: diff.diff, diffTruncated: diff.truncated } });
+
+    // The changed revision's layout decides the framework; nothing is installed for this check.
+    const layoutDir = join(this.workRoot, 'layout-check');
+    let framework: Framework;
+    try {
+      await checkout(source, headSha!, layoutDir);
+      framework = detectFramework(layoutDir);
+      const problem = layoutProblem(framework, layoutDir);
+      if (problem) {
+        block(problem);
+        return empty(source, repoDir, diff);
+      }
+    } finally {
+      rmSync(layoutDir, { recursive: true, force: true });
+    }
+    this.update({ framework });
+    if (!SANDBOX_FRAMEWORKS.includes(framework)) {
+      block(`No supported test framework was detected at the changed revision (supported: ${SUPPORTED_TEXT}). Nothing was run.`);
+      return empty(source, repoDir, diff);
+    }
+    const docker = await checkDocker();
+    if (!docker.ok) {
+      block(`Sandbox runner unavailable: ${docker.detail}`);
+      return empty(source, repoDir, diff);
+    }
+
+    this.pool = new WorkspacePool(source, this.workRoot, framework);
+    const head = await this.runSuite('head', headSha!);
+    const base = await this.runSuite('base', baseSha!);
+    this.changeBaseSuiteId = base.id;
+    this.changeExamined = [head, base].map((e, i) => ({
+      revision: i === 0 ? 'head' : 'base',
+      sha: e.commitSha!,
+      experimentId: e.id,
+      status: e.status as ChangeRevisionRun['status'],
+      tests: e.result?.attempts[0]?.tests ?? null,
+    }));
+
+    if (head.status === 'error' || !head.result) {
+      block(`The test suite could not run at the changed revision: ${(head.observation ?? 'no result').slice(0, 400)}`);
+      return empty(source, repoDir, diff);
+    }
+    if (head.status === 'passed') {
+      const decision = decidePassingChange(
+        { status: head.status, tests: head.result.attempts[0]?.tests ?? null },
+        { status: base.status, tests: base.result?.attempts[0]?.tests ?? null },
+        testScopeConcerns(diff),
+      );
+      this.changeEarly = decision;
+      return empty(source, repoDir, diff);
+    }
+    // A failing suite: its output is the evidence the ordinary stages work from.
+    const failed = head.result.attempts.find((a) => !a.passed);
+    this.evidence({
+      kind: 'assumption',
+      title: 'Test output from the sandbox stands in for a CI log',
+      detail: `No CI log is used for a change verification. The output of the full test suite at ${headSha!.slice(0, 12)} (experiment ${head.id}) is analysed in its place; it is the last ${(failed?.outputTail.length ?? 0).toLocaleString()} characters of that run.`,
+      hypothesisKey: null, experimentId: head.id, sourceId: null, effect: null,
+      provenance: { type: 'experiment', ref: head.id },
+    });
+    return { source, log: failed?.outputTail ?? '', diff, repoDir };
+  }
+
+  /** One full-suite run at a revision, recorded like any other experiment. */
+  private async runSuite(revision: 'base' | 'head', sha: string): Promise<Experiment> {
+    const exp = this.store.addExperiment({
+      id: newId('exp'), investigationId: this.id, hypothesisKey: null,
+      kind: revision === 'head' ? 'reproduce' : 'compare_parent',
+      title: revision === 'head' ? 'Run the test suite at the changed revision' : 'Run the test suite at the base revision',
+      reason: revision === 'head'
+        ? `Runs the full test suite at the changed revision ${sha.slice(0, 12)} in a clean, offline sandbox. This defines the scope of any conclusion.`
+        : `Runs the same suite at the base revision ${sha.slice(0, 12)}, so results at the two revisions can be compared.`,
+      status: 'queued', backend: 'docker', command: null, environment: null, commitSha: sha,
+      testSelection: describeSelection(this.inv.framework, {}), plannedAttempts: 1, startedAt: null, finishedAt: null,
+      durationMs: null, result: null, observation: null, effect: null, patchId: null,
+    });
+    this.stage(`Running the test suite at the ${revision === 'head' ? 'changed' : 'base'} revision`);
+    let done: Experiment;
+    try {
+      done = await runTestExperiment({ store: this.store, experiment: exp, workspace: await this.pool.get(sha), selection: {}, seeds: [undefined] });
+    } catch (err) {
+      done = this.store.updateExperiment(exp.id, { status: 'error', finishedAt: nowIso(), observation: `Could not prepare the workspace: ${(err as Error).message.slice(0, 400)}` });
+    }
+    const summary = done.result ? summarizeAttempts(done) : done.observation ?? 'No result.';
+    done = this.store.updateExperiment(done.id, { observation: done.result ? summary : done.observation });
+    this.evidence({
+      kind: 'experiment_result',
+      title: `${revision === 'head' ? 'Changed' : 'Base'} revision ${sha.slice(0, 12)}: ${done.status === 'error' ? 'could not run' : summary}`,
+      detail: done.status === 'error' ? done.observation ?? '' : `Full test suite at the ${revision === 'head' ? 'changed' : 'base'} revision. ${summary}`,
+      hypothesisKey: null, experimentId: done.id, sourceId: null, effect: null,
+      provenance: { type: 'experiment', ref: done.id },
+    });
+    return done;
+  }
+
+  /** Records the change outcome. Used directly for blocked and passing changes, and after a full investigation. */
+  private finishChange(outcome: ChangeOutcome, detail: string, fix: 'VALIDATED' | 'REJECTED' | 'NONE' = 'NONE') {
+    const inv = this.inv;
+    const headRun = this.changeExamined.find((r) => r.revision === 'head');
+    const image = this.changeExamined.length ? imageFor(inv.framework) : null;
+    const change = {
+      ...inv.change!,
+      outcome,
+      outcomeDetail: detail,
+      fix,
+      examined: this.changeExamined,
+      notTested: notTestedFor({ outcome, image, headTests: headRun?.tests ?? null, diffTruncated: this.intake?.diff?.truncated ?? false }),
+    };
+    const early = this.changeEarly !== null;
+    this.update({
+      change,
+      ...(early
+        ? {
+            summary: detail,
+            status: outcome === 'no_regression_observed' ? 'completed' : 'inconclusive',
+            stage: 'Complete',
+            limitations: [...new Set([...inv.limitations, ...this.limitations])],
+          }
+        : {}),
+    });
+    if (early) this.pushVerdict('Change verified', null, detail);
+    this.evidence({
+      kind: 'inference',
+      title: `Change verification: ${outcome.replace(/_/g, ' ')} · fix ${fix}`,
+      detail: `${detail}\n\nScope: ${this.changeExamined.map((r) => `${r.revision} ${r.sha.slice(0, 12)} — ${r.tests ? `${r.tests.failed}/${r.tests.total} failed` : r.status}`).join('; ') || 'no tests ran'}.\nNot examined:\n${change.notTested.map((n) => `• ${n}`).join('\n')}`,
+      hypothesisKey: inv.primaryHypothesis, experimentId: headRun?.experimentId ?? null, sourceId: null, effect: null,
+      provenance: { type: 'policy', ref: 'change verification rules' },
+    });
+  }
+
+  private finalizeChange() {
+    const inv = this.inv;
+    const experiments = this.store.listExperiments(this.id);
+    const decision = decideFailingChange({
+      verdict: inv.verdict,
+      classification: inv.classification,
+      sandboxRan: experiments.some((e) => e.backend === 'docker' && e.result),
+      experiments,
+      baseSuiteId: this.changeBaseSuiteId,
+      headSha: inv.commitSha,
+      baseSha: inv.parentSha ?? '',
+    });
+    this.finishChange(decision.outcome, decision.detail, changeFixOutcome(this.store.listPatches(this.id)));
   }
 
   // ------------------------------------------------------------ mode / models
@@ -467,7 +703,16 @@ export class InvestigationRun {
   // ------------------------------------------------------------ 3. plan
   private selection(): TestSelection {
     const f = this.facts;
-    if (f.compileErrors.length) return {};
+    if (f.compileErrors.length) {
+      // TypeScript: re-run the compiler step CI ran. Go: `go build ./...`, unless a package's tests did not build.
+      if (f.framework === 'jest' && f.compileTool === 'tsc') return { check: f.tsBuild ? 'build' : 'typecheck' };
+      if (f.framework === 'go' && !f.goTestBuildFailed) return { check: 'build' };
+      return {};
+    }
+    if (f.framework === 'go') {
+      // Log-derived Go test names select by -run across all packages; the package import path is not trusted as a directory.
+      return f.failingTests.length === 1 ? { name: f.failingTests[0].name } : {};
+    }
     if (f.framework === 'maven') {
       const t = f.failingTests[0];
       if (!t) return {};
@@ -501,9 +746,15 @@ export class InvestigationRun {
       durationMs: null, result: null, observation: null, effect: null, patchId: null,
     });
 
-    const runnable = this.facts.framework === 'jest' || this.facts.framework === 'maven';
-    if (!docker.ok || !runnable) {
-      const why = !docker.ok ? `Sandbox runner unavailable: ${docker.detail}` : `Sandbox experiments are not supported for ${this.facts.framework === 'unknown' ? 'this test framework' : `"${this.facts.framework}"`} yet (supported: Jest, Maven). Conclusions rest on log and diff analysis.`;
+    const runnable = SANDBOX_FRAMEWORKS.includes(this.facts.framework);
+    // pytest, Go, and TypeScript: the checkout's layout decides support, before anything is installed or run.
+    if (docker.ok && runnable) this.unsupportedLayout = await this.checkoutLayoutProblem();
+    if (!docker.ok || !runnable || this.unsupportedLayout) {
+      const why = !docker.ok
+        ? `Sandbox runner unavailable: ${docker.detail}`
+        : this.unsupportedLayout
+          ? `${this.unsupportedLayout} No dependencies were installed and no tests were run. Conclusions rest on log and diff analysis.`
+          : `Sandbox experiments are not supported for ${this.facts.framework === 'unknown' ? 'this test framework' : `"${this.facts.framework}"`} yet (supported: ${SUPPORTED_TEXT}). Conclusions rest on log and diff analysis.`;
       this.limitations.push(why);
       const e = mk('reproduce', 'Reproduce the failure', why, hyps[0]?.key ?? null, inv.commitSha, 0);
       skip(e);
@@ -517,7 +768,11 @@ export class InvestigationRun {
       });
       if (!isCompile && (categories.has('flaky_test') || categories.has('infrastructure') || requested.has('repeat'))) {
         out.push({
-          exp: mk('repeat', `Run the failing test ${repeat}× with varied seeds`, `Measures intermittency at the same commit. Seeds are attempt × 65537 so every run is replayable. ${repeat} runs bound, but do not pin down, the true failure rate.`, firstFor(['flaky_test']), inv.commitSha, repeat),
+          exp: this.facts.framework === 'go'
+            ? mk('repeat', `Run the failing test ${repeat}× with varied -shuffle seeds`, `Measures intermittency at the same commit. Each run is a separate offline \`go test -count=1\` process (no test cache) with a replayable -shuffle seed for test order; the seed does not fix timing or math/rand inside tests. ${repeat} runs bound, but do not pin down, the true failure rate.`, firstFor(['flaky_test']), inv.commitSha, repeat)
+            : this.facts.framework === 'pytest'
+            ? mk('repeat', `Run the failing test ${repeat}× in fresh processes`, `Measures intermittency at the same commit. Each run is a separate offline pytest process; pytest has no seed option, so runs are independent rather than replayable. ${repeat} runs bound, but do not pin down, the true failure rate.`, firstFor(['flaky_test']), inv.commitSha, repeat)
+            : mk('repeat', `Run the failing test ${repeat}× with varied seeds`, `Measures intermittency at the same commit. Seeds are attempt × 65537 so every run is replayable. ${repeat} runs bound, but do not pin down, the true failure rate.`, firstFor(['flaky_test']), inv.commitSha, repeat),
           selection: sel, seeds: Array.from({ length: repeat }, (_, i) => attemptSeed(i + 1)), sha: inv.commitSha,
         });
       } else if (isCompile) {
@@ -527,7 +782,7 @@ export class InvestigationRun {
         const n = isCompile ? 1 : 3;
         const seeds = isCompile ? [undefined] : [ciSeed, attemptSeed(1), attemptSeed(2)].slice(0, n);
         out.push({
-          exp: mk('compare_parent', 'Compare against the parent commit', `Runs the same selection at the parent ${inv.parentSha.slice(0, 12)}${ciSeed !== undefined ? ` (first run with the CI seed ${ciSeed})` : ''}. If the parent passes, the failing commit introduced the failure.`, firstFor(['code_regression', 'dependency_regression']), inv.parentSha, n),
+          exp: mk('compare_parent', inv.source === 'change' ? 'Compare against the base revision' : 'Compare against the parent commit', `Runs the same selection at the ${inv.source === 'change' ? 'base revision' : 'parent'} ${inv.parentSha.slice(0, 12)}${ciSeed !== undefined ? ` (first run with the CI seed ${ciSeed})` : ''}. If the parent passes, the failing commit introduced the failure.`, firstFor(['code_regression', 'dependency_regression']), inv.parentSha, n),
           selection: sel, seeds, sha: inv.parentSha,
         });
       } else {
@@ -548,9 +803,24 @@ export class InvestigationRun {
     return out.filter((p) => !p.skipped);
   }
 
+  private unsupportedLayout: string | null = null;
+
+  /** Reads the failing commit's project layout (pytest, Go, TypeScript) from a throwaway checkout; null when supported. */
+  private async checkoutLayoutProblem(): Promise<string | null> {
+    if (this.facts.framework !== 'pytest' && this.facts.framework !== 'go' && this.facts.framework !== 'jest') return null;
+    const dir = join(this.workRoot, 'layout-check');
+    try {
+      await checkout(this.intake.source, this.inv.commitSha, dir);
+      return layoutProblem(this.facts.framework, dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
   // ------------------------------------------------------------ 4. execute
   private async execute(planned: Awaited<ReturnType<InvestigationRun['plan']>>, hyps: Hypothesis[]) {
-    this.pool = new WorkspacePool(this.intake.source, this.workRoot, this.facts.framework);
+    // Change verifications already prepared workspaces for both revisions while collecting.
+    this.pool ??= new WorkspacePool(this.intake.source, this.workRoot, this.facts.framework);
     for (const p of planned) {
       if (p.exp.kind === 'external_search') {
         await this.runSearch(p.exp);
@@ -670,7 +940,8 @@ export class InvestigationRun {
       if (fw === 'maven') {
         const [file, name] = t.name.split('#');
         add({ file, name });
-      } else if (t.file) add({ file: t.file, name: t.name });
+      } else if (fw === 'go') add({ name: t.name });
+      else if (t.file) add({ file: t.file, name: t.name });
     }
     return out;
   }
@@ -695,7 +966,7 @@ export class InvestigationRun {
   private async iterate(hyps: Hypothesis[]) {
     const inv = this.inv;
     const L = config.agentLoop;
-    const runnable = Boolean(this.pool) && (this.facts.framework === 'jest' || this.facts.framework === 'maven') && (await checkDocker()).ok;
+    const runnable = Boolean(this.pool) && SANDBOX_FRAMEWORKS.includes(this.facts.framework) && !this.unsupportedLayout && (await checkDocker()).ok;
     const selections = runnable ? this.loopSelections() : [];
     const ctx = { selections, hasParent: Boolean(inv.parentSha), searchEnabled: tavilyConfigured() };
     const state = { runsUsed: 0, searchesUsed: 0, seen: new Set<string>() };
@@ -852,16 +1123,12 @@ export class InvestigationRun {
     }))!;
     const v = res.data;
 
-    // Deterministic guard: a hypothesis contradicted by an experiment cannot be "supported".
+    // Deterministic guard: "supported" requires at least one experiment whose result the effect
+    // rules recorded as supporting this hypothesis. A model's word alone is not support.
     for (const h of hyps) {
       const mv = v.hypotheses.find((x) => x.id === h.key);
       const t = tally.get(h.key)!;
-      let status = mv?.status ?? (t.c ? 'refuted' : t.s ? 'supported' : 'inconclusive');
-      let assessment = mv?.assessment ?? null;
-      if (status === 'supported' && t.c > 0 && t.s === 0) {
-        status = 'inconclusive';
-        assessment = `${assessment ?? ''} [Alibi: downgraded — experiments contradict this hypothesis and none support it.]`.trim();
-      }
+      const { status, assessment } = guardHypothesisStatus(mv?.status ?? (t.c ? 'refuted' : t.s ? 'supported' : 'inconclusive'), mv?.assessment ?? null, t);
       this.store.updateHypothesis(h.id, { status, assessment });
     }
     const conf = assessConfidence({ classification: v.classification, experiments, patches: [], dependencyChanged: (d?.dependencyChanges.length ?? 0) > 0, docsOnlyChange: d?.onlyDocs ?? false, corroboratingSources: sources.filter((s) => s.official).length });
@@ -878,7 +1145,7 @@ export class InvestigationRun {
     this.evidence({
       kind: 'inference',
       title: `Verdict after experiments: ${rec.verdict} — ${v.classification.replace(/_/g, ' ')}`,
-      detail: `${v.summary}${rec.adjusted ? `\n\nAlibi policy: ${rec.reason}` : ''}`,
+      detail: `${v.summary}${rec.adjusted ? `\n\n${PRODUCT_NAME} policy: ${rec.reason}` : ''}`,
       hypothesisKey: v.primary_hypothesis, experimentId: null, sourceId: null, effect: null,
       provenance: { type: 'model', ref: res.origin === 'heuristic' ? 'heuristic rules' : `${res.model}${res.origin === 'replay' ? ' (replay)' : ''}` },
     });
@@ -917,7 +1184,8 @@ export class InvestigationRun {
     }
     if (v.classification === 'flaky_test') {
       const t = this.facts.failingTests[0];
-      const file = t?.file;
+      // Go logs name the test, not its file: look up the declaring _test.go file in the checkout.
+      const file = t?.file ?? (t && this.facts.framework === 'go' ? findGoTestFile(failingWs.dir, t.name) ?? undefined : undefined);
       const content = file ? read(file) : null;
       if (t && file && content) {
         const r = repeat?.result;
@@ -937,7 +1205,7 @@ export class InvestigationRun {
         .filter((f): f is { path: string; content: string } => f.content !== null && f.content.length < 20_000);
       if (files.length && this.inv.mode !== 'heuristic') {
         const primary = this.store.listHypotheses(this.id).find((h) => h.key === v.primary_hypothesis);
-        patchUser = patchPrompt({ signature: this.facts.signature, failureOutput: reproduce.result!.attempts[0]?.outputTail ?? '', diff: d.diff, files, rootCause: primary?.cause ?? v.summary });
+        patchUser = patchPrompt({ signature: this.facts.signature, failureOutput: reproduce.result!.attempts[0]?.outputTail ?? '', diff: d.diff, files: files.map((f) => ({ ...f, readOnly: isTestFile(f.path) })), rootCause: primary?.cause ?? v.summary });
         const res = await this.modelStep({
           step: 'patch',
           role: 'deep',
@@ -950,7 +1218,9 @@ export class InvestigationRun {
           fallback: null,
         });
         if (res) {
-          modelAllowed = files.map((f) => f.path);
+          // Test files are context only, for the first patch as for the retry: a fix that makes
+          // tests pass by changing what they expect is not a fix.
+          modelAllowed = files.map((f) => f.path).filter((p) => !isTestFile(p));
           candidates.unshift({
             title: `Targeted fix by ${res.model.split('/').pop()}${res.origin === 'replay' ? ' (replay)' : ''}`,
             strategy: 'code_patch',
@@ -978,7 +1248,7 @@ export class InvestigationRun {
       // ALIBI_LOOP only: one bounded retry of a model-written fix, given the actual failing output.
       if (config.agentLoop.enabled && !outcome.ok && !retried && patchUser && modelAllowed && (cand.origin === 'model' || cand.origin === 'replay')) {
         retried = true;
-        await this.retryPatch(patch, outcome, patchUser, modelAllowed.filter((p) => !isTestFile(p)), v, i);
+        await this.retryPatch(patch, outcome, patchUser, modelAllowed, v, i);
       }
     }
   }
@@ -1024,8 +1294,9 @@ export class InvestigationRun {
     const inv = this.inv;
     this.stage(`Validating candidate: ${patch.title}`);
     this.store.updatePatch(patch.id, { status: 'validating' });
-    const ws = await this.pool.fresh(inv.commitSha, `patch-${patch.id.slice(-6)}`);
-    const applied = await applyPatch(ws.dir, patch.diff);
+    // Checkout → apply candidate → install → test, all in a fresh workspace.
+    const ws = await this.pool.fresh(inv.commitSha, `patch-${patch.id.slice(-6)}`, patch.diff);
+    const applied = ws.patchApplied ?? { ok: false, detail: 'patch was not applied' };
     if (!applied.ok) {
       this.store.updatePatch(patch.id, { status: 'failed', validation: { summary: `Patch did not apply: ${applied.detail}` } });
       return { ok: false, failureOutput: applied.detail, summary: 'The patch did not apply' };
@@ -1035,7 +1306,8 @@ export class InvestigationRun {
     const targetedSel: TestSelection = flaky ? { file: sel.file } : sel;
     const n = flaky ? Math.max(2, Math.min(inv.options.repeat, 30)) : 3;
     const seeds = Array.from({ length: n }, (_, i) => attemptSeed(i + 1));
-    const fullSuite = !targetedSel.file && !targetedSel.name;
+    // A compile check (tsc, go build) is not a test run: the regression suite must still run after it.
+    const fullSuite = !targetedSel.file && !targetedSel.name && !targetedSel.check;
 
     const mk = (kind: ExperimentKind, title: string, reason: string, s: TestSelection, attempts: number): Experiment => ({
       id: newId('exp'), investigationId: this.id, hypothesisKey: inv.primaryHypothesis, kind, title, reason, status: 'queued', backend: 'docker',
@@ -1085,8 +1357,9 @@ export class InvestigationRun {
     if (!patch || patch.investigationId !== this.id) throw new Error('Patch not found for this investigation');
     this.quiet = true;
     try {
-      const location = inv.source === 'demo' && inv.scenarioId ? demoRepoPath(inv.scenarioId) : `https://github.com/${inv.repository}`;
-      const cacheKey = inv.source === 'demo' && inv.scenarioId ? `demo:${inv.scenarioId}` : `gh:${inv.repository}`;
+      const sample = inv.source === 'demo' && inv.scenarioId ? inv.scenarioId : inv.change?.origin.kind === 'sample' ? inv.change.origin.scenarioId : null;
+      const location = sample ? demoRepoPath(sample) : `https://github.com/${inv.repository}`;
+      const cacheKey = sample ? `demo:${sample}` : `gh:${inv.repository}`;
       this.facts = extractFacts(this.store.getLog(this.id) ?? '', inv.framework);
       this.intake = { source: { location, cacheKey }, log: '', diff: null, repoDir: null };
       this.pool = new WorkspacePool(this.intake.source, this.workRoot, this.facts.framework);

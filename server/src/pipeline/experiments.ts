@@ -1,12 +1,39 @@
-import { join } from 'node:path';
+import { existsSync, realpathSync, statSync } from 'node:fs';
+import { join, sep } from 'node:path';
 import { config } from '../config.js';
 import { redactSecrets } from '../analysis/redact.js';
 import { wilson } from '../analysis/stats.js';
 import type { Store } from '../db/store.js';
 import type { Attempt, Experiment, Framework, TestCounts } from '../domain/types.js';
 import { runContainer } from '../runner/docker.js';
-import { envFor, imageFor, parseJestResult, parseSurefireReports, testCommand, type TestSelection } from '../runner/frameworks.js';
+import { envFor, imageFor, parseJestResult, parseSurefireReports, testCommand, validateSelection, type TestSelection } from '../runner/frameworks.js';
+import { parseGoTestJson } from '../runner/golang.js';
+import { parsePytestJunit } from '../runner/python.js';
 import { prepareWorkspace, type RepoSource, type Workspace } from '../runner/workspace.js';
+
+/** True when `rel` resolves to a regular file inside `dir` (symlinks may not point outside). */
+export function isFileInside(dir: string, rel: string): boolean {
+  return isInside(dir, rel, 'file');
+}
+
+/** True when `rel` resolves to `dir` itself or a directory inside it (symlinks may not point outside). */
+export function isDirInside(dir: string, rel: string): boolean {
+  return isInside(dir, rel, 'dir');
+}
+
+function isInside(dir: string, rel: string, kind: 'file' | 'dir'): boolean {
+  const p = join(dir, rel);
+  if (!existsSync(p)) return false;
+  try {
+    const real = realpathSync(p);
+    const root = realpathSync(dir);
+    const st = statSync(real);
+    if (kind === 'dir') return st.isDirectory() && (real === root || real.startsWith(root + sep));
+    return st.isFile() && real.startsWith(root + sep);
+  } catch {
+    return false;
+  }
+}
 
 /** Fixed, spread-out seed sequence so every repeated Jest run is replayable. */
 export function attemptSeed(index: number): number {
@@ -14,8 +41,15 @@ export function attemptSeed(index: number): number {
 }
 
 export function describeSelection(framework: Framework, sel: TestSelection): string {
+  if (sel.check === 'typecheck') return 'TypeScript type check (tsc --noEmit -p tsconfig.json)';
+  if (sel.check === 'build') return framework === 'go' ? 'Go build (go build ./...)' : 'TypeScript build (tsc -p tsconfig.build.json)';
+  if (framework === 'go') {
+    if (!sel.file && !sel.name) return 'all packages (go test ./...)';
+    return sel.name ? `${sel.file ?? './...'} › ${sel.name}` : `${sel.file}`;
+  }
   if (!sel.file && !sel.name) return framework === 'maven' ? 'full build and test suite' : 'full test suite';
   if (framework === 'maven') return sel.name ? `${sel.file}#${sel.name}` : `${sel.file}`;
+  if (framework === 'pytest') return sel.name ? `${sel.file}::${sel.name}` : `${sel.file}`;
   return sel.name ? `${sel.file ?? ''} › ${sel.name}` : `${sel.file}`;
 }
 
@@ -37,15 +71,19 @@ export class WorkspacePool {
     return ws;
   }
 
-  /** A fresh, single-use workspace (used for applying candidate patches). */
-  fresh(sha: string, label: string): Promise<Workspace> {
-    return prepareWorkspace(this.source, sha, join(this.root, `${label}-${sha.slice(0, 8)}`), this.framework);
+  /**
+   * A fresh, single-use workspace for validating a candidate patch. The patch is applied
+   * before dependencies are installed, so dependency changes are actually exercised.
+   */
+  fresh(sha: string, label: string, patch?: string): Promise<Workspace> {
+    return prepareWorkspace(this.source, sha, join(this.root, `${label}-${sha.slice(0, 8)}`), this.framework, { patch });
   }
 }
 
 function installFailure(ws: Workspace): string | null {
-  // npm install failures are fatal; Maven warm-up may fail when the commit doesn't compile (expected).
-  if (ws.framework === 'jest') {
+  if (ws.unsupported) return ws.unsupported;
+  // npm, pip, and Go module install failures are fatal; Maven warm-up may fail when the commit doesn't compile (expected).
+  if (ws.framework === 'jest' || ws.framework === 'pytest' || ws.framework === 'go') {
     const bad = ws.install.find((i) => i.exitCode !== 0);
     if (bad) return `Dependency installation failed (exit ${bad.exitCode ?? 'timeout'}):\n${bad.output.slice(-3000)}`;
   }
@@ -76,11 +114,36 @@ export async function runTestExperiment(opts: RunTestsOptions): Promise<Experime
     });
   }
 
+  // A log-derived test file is only run if it is a real file in this checkout; otherwise the
+  // experiment cannot run (neutral), rather than letting the runner interpret the name.
+  const sel = validateSelection(ws.framework, selection);
+  const missing =
+    ws.framework === 'go' ? Boolean(selection.file) && (!sel.file || !isDirInside(ws.dir, sel.file))
+    : (ws.framework === 'jest' || ws.framework === 'pytest') && Boolean(selection.file) && (!sel.file || !isFileInside(ws.dir, sel.file));
+  if (sel.check === 'build' && ws.framework === 'jest' && !isFileInside(ws.dir, 'tsconfig.build.json')) {
+    return store.updateExperiment(exp.id, {
+      status: 'error',
+      finishedAt: new Date().toISOString(),
+      durationMs: Date.now() - startedAt.getTime(),
+      observation: 'The CI log ran tsc with tsconfig.build.json, but that file is not in this checkout, so the build check was not run.',
+    });
+  }
+  if (missing) {
+    return store.updateExperiment(exp.id, {
+      status: 'error',
+      finishedAt: new Date().toISOString(),
+      durationMs: Date.now() - startedAt.getTime(),
+      observation: `The selected test file "${String(selection.file).slice(0, 120)}" is not a test file in this checkout, so it was not run.`,
+    });
+  }
+
   const attempts: Attempt[] = [];
   let lastCommand: string[] = [];
   for (let i = 0; i < opts.seeds.length; i++) {
-    const seed = ws.framework === 'jest' ? opts.seeds[i] : undefined;
-    const resultFile = `/work/.alibi/result-${exp.id}-${i + 1}.json`;
+    // Jest seeds its runner; Go uses the seed for -shuffle (test order). Checks have no seed.
+    const seed = (ws.framework === 'jest' || ws.framework === 'go') && !sel.check ? opts.seeds[i] : undefined;
+    const ext = ws.framework === 'pytest' ? 'xml' : 'json';
+    const resultFile = `/work/.alibi/result-${exp.id}-${i + 1}.${ext}`;
     const command = testCommand(ws.framework, { selection, seed, resultFile });
     lastCommand = command;
     const res = await runContainer({
@@ -92,8 +155,13 @@ export async function runTestExperiment(opts: RunTestsOptions): Promise<Experime
       env: envFor(ws.framework),
       timeoutSec: config.runner.timeoutSec,
     });
+    const localResult = join(ws.dir, '.alibi', `result-${exp.id}-${i + 1}.${ext}`);
     let tests: TestCounts | null =
-      ws.framework === 'maven' ? parseSurefireReports(ws.dir) : parseJestResult(join(ws.dir, '.alibi', `result-${exp.id}-${i + 1}.json`));
+      sel.check ? null // a compile check (tsc, go build) has no test cases
+      : ws.framework === 'go' ? parseGoTestJson(res.output).counts
+      : ws.framework === 'maven' ? parseSurefireReports(ws.dir)
+      : ws.framework === 'pytest' ? parsePytestJunit(localResult)
+      : parseJestResult(localResult);
     if (ws.framework === 'maven' && /COMPILATION ERROR|Compilation failure/.test(res.output)) tests = null;
     attempts.push({
       index: i + 1,

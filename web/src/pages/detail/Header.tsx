@@ -16,7 +16,7 @@ export function Header({ b }: { b: Bundle }) {
     setBusy(true);
     try {
       const next = await api.rerun(inv.id);
-      toast('Started a new investigation of the same failure.');
+      toast(inv.change ? 'Started a new verification of the same change.' : 'Started a new investigation of the same failure.');
       navigate(`/investigations/${next.id}`);
     } catch (e) {
       toast((e as Error).message, true);
@@ -37,11 +37,10 @@ export function Header({ b }: { b: Bundle }) {
 
   return (
     <header className="inv-head">
-      <div style={{ minWidth: 0, flex: '1 1 480px' }}>
-        <div className="row-wrap" style={{ marginBottom: 8 }}>
+      <div className="inv-head-main">
+        <div className="inv-badges">
           <StatusBadge status={inv.status} />
           <ModeBadge mode={inv.mode} pending={!modeDecided(inv)} />
-          {modeDecided(inv) && <span className="xs muted">{MODE_INFO[inv.mode]?.help}</span>}
         </div>
         <div className="inv-title">
           <h1>{inv.repository}</h1>
@@ -51,15 +50,23 @@ export function Header({ b }: { b: Bundle }) {
           {inv.commitMessage ?? 'Unknown commit message'}
         </p>
         <div className="inv-meta">
-          <span>
-            <Icon name="workflow" /> {inv.workflow ?? 'Workflow'} / {inv.job ?? 'job'}
-          </span>
-          <span>
-            <Icon name="branch" /> <span className="mono">{inv.branch ?? '—'}</span>
-          </span>
-          <span>
-            <Icon name="commit" /> parent <Sha sha={inv.parentSha} />
-          </span>
+          {inv.change ? (
+            <span>
+              <Icon name="commit" /> base <Sha sha={inv.parentSha} /> → changed <Sha sha={inv.commitSha} />
+            </span>
+          ) : (
+            <>
+              <span>
+                <Icon name="workflow" /> {inv.workflow ?? 'Workflow'} / {inv.job ?? 'job'}
+              </span>
+              <span>
+                <Icon name="branch" /> <span className="mono">{inv.branch ?? '—'}</span>
+              </span>
+              <span>
+                <Icon name="commit" /> parent <Sha sha={inv.parentSha} />
+              </span>
+            </>
+          )}
           {inv.commitAuthor && (
             <span>
               <Icon name="user" /> {inv.commitAuthor}
@@ -77,9 +84,11 @@ export function Header({ b }: { b: Bundle }) {
             <Icon name="clock" /> <TimeAgo iso={inv.createdAt} />
           </span>
           <span>
-            <Icon name="box" /> {inv.source === 'demo' ? 'Demo fixture' : 'GitHub Actions'}
+            <Icon name="box" /> {inv.source === 'demo' ? 'Demo fixture' : inv.source === 'change' ? 'Change verification' : 'GitHub Actions'}
           </span>
         </div>
+        {/* What the reasoning mode means for this run: kept visible, below the identity of the run. */}
+        {modeDecided(inv) && MODE_INFO[inv.mode] && <p className="inv-mode-note">{MODE_INFO[inv.mode].help}</p>}
       </div>
       <div className="page-actions">
         {inv.runUrl && (
@@ -88,7 +97,7 @@ export function Header({ b }: { b: Bundle }) {
           </a>
         )}
         <Link className="btn" to={`/investigations/${inv.id}/log`}>
-          <Icon name="terminal" /> CI log
+          <Icon name="terminal" /> {inv.change ? 'Test output' : 'CI log'}
         </Link>
         <button className="btn" onClick={rerun} disabled={busy || running} aria-busy={busy}>
           <Icon name="refresh" className={busy ? 'spin' : undefined} /> Re-run
@@ -109,10 +118,10 @@ function StageItem({ s, i }: { s: Stage; i: number }) {
   const changed = useChangeFlash(s.state);
   return (
     <li className={`pstage ${s.state} ${changed ? 'changed' : ''}`} aria-current={s.state === 'running' ? 'step' : undefined} title={`${s.name}: ${STATE_LABEL[s.state]}`}>
-      <span className="pstate">
-        Step {i + 1} · {STATE_LABEL[s.state]}
-      </span>
       <span className="ptitle">
+        <span className="pnum" aria-hidden="true">
+          {i + 1}
+        </span>
         <Icon name={STATE_ICON[s.state]} className={s.state === 'running' ? 'spin' : undefined} />
         <span className="pname-full">{s.name}</span>
         <span className="pname-short" aria-hidden="true">
@@ -120,7 +129,10 @@ function StageItem({ s, i }: { s: Stage; i: number }) {
         </span>
         <span className="sr-only">: {STATE_LABEL[s.state]}</span>
       </span>
-      <span className="pmeta">{s.meta}</span>
+      <span className="pmeta">
+        <span className="pstate">{STATE_LABEL[s.state]}</span>
+        {s.meta ? ` · ${s.meta}` : ''}
+      </span>
     </li>
   );
 }

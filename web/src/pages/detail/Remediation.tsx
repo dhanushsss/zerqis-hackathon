@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type Bundle, type Patch } from '../../api';
-import { AttemptStrip, Badge, Callout, DiffView, Icon, useChangeFlash, useToast } from '../../components/ui';
+import { BRAND } from '../../brand';
+import { AttemptStrip, Badge, Callout, DiffView, ExpStatus, Icon, useChangeFlash, useToast } from '../../components/ui';
 import { patchRisks } from './derive';
 
 const STEPS = ['Proposed', 'Validation running', 'Validated', 'PR created'] as const;
@@ -41,6 +42,8 @@ function PatchCard({ p, b, publicDemo }: { p: Patch; b: Bundle; publicDemo: bool
   const validation = b.experiments.filter((e) => e.patchId === p.id);
   const latestTargeted = [...validation].reverse().find((e) => e.kind === 'validate_patch');
   const latestSuite = [...validation].reverse().find((e) => e.kind === 'regression_suite');
+  // Short diffs stay open; long ones (e.g. whole-file reverts) are one click away.
+  const diffLines = p.diff.split('\n').length;
   const invRunning = inv.status === 'running' || inv.status === 'queued';
   const canPr = inv.source === 'github' && p.status === 'validated' && !publicDemo;
   const prReason = publicDemo ? 'Disabled on the public demo.' : inv.source !== 'github' ? 'Draft PRs are for GitHub investigations; demo fixtures are local repositories. Download the .diff instead.' : p.status !== 'validated' ? 'Only validated patches can be proposed.' : 'Create a fix branch and a draft PR on GitHub';
@@ -110,6 +113,49 @@ function PatchCard({ p, b, publicDemo }: { p: Patch; b: Bundle; publicDemo: bool
       </div>
       <div className="card-body stack-md">
         <Lifecycle p={p} prUrl={prUrl} />
+        {/* Validation first: a fix is only as good as the runs recorded against it. */}
+        <div className="vresult" aria-label="Validation results">
+          {latestTargeted ? (
+            <>
+              <Link to={`/investigations/${inv.id}/experiments/${latestTargeted.id}`} className={`vrow s-${latestTargeted.status}`}>
+                <ExpStatus exp={latestTargeted} />
+                <span className="vrow-label">
+                  <strong>Targeted runs</strong> of the failing tests
+                </span>
+                <AttemptStrip exp={latestTargeted} />
+                <span className="vrow-result">
+                  Targeted: {latestTargeted.result ? `${latestTargeted.result.passes}/${latestTargeted.result.attempts.length} runs passed` : latestTargeted.status}
+                </span>
+              </Link>
+              {latestSuite ? (
+                <Link to={`/investigations/${inv.id}/experiments/${latestSuite.id}`} className={`vrow s-${latestSuite.status}`}>
+                  <ExpStatus exp={latestSuite} />
+                  <span className="vrow-label">
+                    <strong>Full regression suite</strong> with the fix applied
+                  </span>
+                  <AttemptStrip exp={latestSuite} />
+                  <span className="vrow-result">Regression suite: {latestSuite.status === 'passed' ? 'passed' : latestSuite.status === 'failed' ? 'failed' : latestSuite.status}</span>
+                </Link>
+              ) : (
+                <p className="vrow vrow-note">
+                  <Icon name={latestTargeted.testSelection?.startsWith('full') ? 'info' : 'skip'} />
+                  <span className="vrow-label">
+                    <strong>Full regression suite</strong>
+                  </span>
+                  <span className="vrow-result muted">
+                    {latestTargeted.testSelection?.startsWith('full') ? 'Targeted run was the full build and suite.' : latestTargeted.status === 'failed' ? 'Suite not run: targeted runs failed.' : 'Suite pending.'}
+                  </span>
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="vrow vrow-note">
+              <Icon name="pending" />
+              <span className="vrow-label">No test has run against this patch.</span>
+              <span className="vrow-result muted">{p.status === 'proposed' ? 'Proposed only: not validated.' : 'No validation run is recorded for this patch.'}</span>
+            </p>
+          )}
+        </div>
         <div className="patch-grid">
           <div className="stack-xs">
             <span className="eyebrow">Why this action</span>
@@ -126,29 +172,6 @@ function PatchCard({ p, b, publicDemo }: { p: Patch; b: Bundle; publicDemo: bool
               ))}
             </ul>
           </div>
-          <div className="stack-xs">
-            <span className="eyebrow">Validation</span>
-            {latestTargeted ? (
-              <div className="stack-xs small">
-                <Link to={`/investigations/${inv.id}/experiments/${latestTargeted.id}`} className="row" style={{ gap: 8 }}>
-                  <AttemptStrip exp={latestTargeted} />
-                  <span>
-                    Targeted: {latestTargeted.result ? `${latestTargeted.result.passes}/${latestTargeted.result.attempts.length} runs passed` : latestTargeted.status}
-                  </span>
-                </Link>
-                {latestSuite ? (
-                  <Link to={`/investigations/${inv.id}/experiments/${latestSuite.id}`} className="row" style={{ gap: 8 }}>
-                    <AttemptStrip exp={latestSuite} />
-                    <span>Regression suite: {latestSuite.status === 'passed' ? 'passed' : latestSuite.status === 'failed' ? 'failed' : latestSuite.status}</span>
-                  </Link>
-                ) : (
-                  <span className="muted">{latestTargeted.testSelection?.startsWith('full') ? 'Targeted run was the full build and suite.' : latestTargeted.status === 'failed' ? 'Suite not run: targeted runs failed.' : 'Suite pending.'}</span>
-                )}
-              </div>
-            ) : (
-              <span className="small muted">No test has run against this patch.</span>
-            )}
-          </div>
         </div>
         <div className="stack-xs">
           <span className="eyebrow">Remaining risks</span>
@@ -158,7 +181,18 @@ function PatchCard({ p, b, publicDemo }: { p: Patch; b: Bundle; publicDemo: bool
             ))}
           </ul>
         </div>
-        <DiffView diff={p.diff} flash={justValidated} />
+        {diffLines <= 40 ? (
+          <DiffView diff={p.diff} flash={justValidated} />
+        ) : (
+          <details className="disclosure diff-disclosure">
+            <summary>
+              <Icon name="chevron" /> Show diff ({diffLines} lines across {p.files.length} {p.files.length === 1 ? 'file' : 'files'})
+            </summary>
+            <div className="disclosure-body">
+              <DiffView diff={p.diff} flash={justValidated} />
+            </div>
+          </details>
+        )}
         {confirming && (
           <Callout tone="tone-warn" icon="pr">
             <span>
@@ -186,9 +220,9 @@ export function Remediation({ b, publicDemo }: { b: Bundle; publicDemo: boolean 
     return (
       <Callout icon={inv.remediationType === 'retry' ? 'refresh' : 'info'}>
         {inv.remediationType === 'retry'
-          ? 'Likely transient. Re-run the failed job; Alibi does not propose code changes for infrastructure failures.'
+          ? `Likely transient. Re-run the failed job; ${BRAND.name} does not propose code changes for infrastructure failures.`
           : done
-            ? 'No candidate fix was justified by the evidence. Alibi makes a conservative recommendation when the cause is not proven.'
+            ? `No candidate fix was justified by the evidence. ${BRAND.name} makes a conservative recommendation when the cause is not proven.`
             : inv.status === 'failed'
               ? 'The investigation stopped before remediation.'
               : 'Candidate fixes are proposed and validated after the verdict.'}

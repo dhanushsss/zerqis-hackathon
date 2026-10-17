@@ -10,13 +10,15 @@ import { CLASSIFICATIONS, type Investigation } from './domain/types.js';
 import { GitHubClient, GitHubError, parseRunUrl, verifyWebhookSignature } from './integrations/github.js';
 import { tavilyConfigured, tavilySearch } from './integrations/tavily.js';
 import { TokenFactoryClient } from './llm/client.js';
-import { IntakeError, startDemo, startFromGitHubRun } from './pipeline/intake.js';
+import { IntakeError, sampleRevisions, startChange, startDemo, startFromGitHubRun } from './pipeline/intake.js';
+import { parseRepoUrl } from './pipeline/change.js';
 import { InvestigationRun } from './pipeline/investigate.js';
 import { InvestigationQueue } from './pipeline/queue.js';
 import { loadReplay } from './pipeline/replay.js';
 import { checkDocker } from './runner/docker.js';
 import { applyPatch, checkout } from './runner/workspace.js';
 import { getScenario, listScenarios } from './scenarios/registry.js';
+import { PRODUCT_NAME } from './brand.js';
 
 export interface AppDeps {
   store: Store;
@@ -24,6 +26,8 @@ export interface AppDeps {
   github: GitHubClient;
   queue: InvestigationQueue;
   publicDemo?: boolean;
+  /** Overrides ALIBI_TRUST_PROXY (tests). */
+  trustProxy?: false | string | number;
 }
 
 const ModeSchema = z.enum(['auto', 'live', 'replay', 'heuristic']).optional();
@@ -54,9 +58,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL ?? 'info', redact: ['req.headers.authorization', 'req.headers["x-hub-signature-256"]'] },
     bodyLimit: 5 * 1024 * 1024,
-    trustProxy: true,
+    // Only explicitly configured proxies may set the client address (req.ip); otherwise the
+    // socket address is used, so X-Forwarded-For cannot be spoofed to evade per-IP limits.
+    trustProxy: deps.trustProxy ?? config.trustProxy,
   });
+  /** Patch re-validations in flight (they run outside the investigation queue). */
+  let revalidations = 0;
   const startLimit = rateLimiter(publicDemo ? 6 : 120, 60 * 60_000);
+  // Provider connection tests can spend paid quota: limited per client everywhere, refused on the public demo.
+  const providerTestLimit = rateLimiter(10, 60 * 60_000);
+  const guardProviderTest = (req: FastifyRequest, reply: FastifyReply, provider: string) => {
+    if (publicDemo) return sendError(reply, 403, `The ${provider} connection test is disabled on the public demo.`);
+    if (!providerTestLimit(req.ip)) return sendError(reply, 429, 'Too many connection tests from this address; try again later.');
+    return null;
+  };
 
   // Keep the raw body for webhook signature verification.
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
@@ -167,7 +182,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         status: z.string().max(20).optional(),
         classification: z.enum(CLASSIFICATIONS).optional(),
         verdict: z.enum(['confirmed', 'probable', 'inconclusive']).optional(),
-        source: z.enum(['demo', 'github']).optional(),
+        source: z.enum(['demo', 'github', 'change']).optional(),
       })
       .parse(req.query);
     return store.listInvestigations({ ...q, q: q.q?.trim() || undefined });
@@ -206,10 +221,42 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (!ref) return sendError(reply, 400, 'Expected a GitHub Actions run URL like https://github.com/owner/repo/actions/runs/123456');
     if (!github.configured) return sendError(reply, 412, 'GitHub integration is not configured', 'Set GITHUB_TOKEN on the server (read-only scopes are enough to investigate).');
     if (publicDemo && !store.listRepositories().some((r) => r.fullName.toLowerCase() === `${ref.owner}/${ref.repo}`.toLowerCase())) {
-      return sendError(reply, 403, 'This public demo only investigates allow-listed repositories.', 'Run Alibi locally to investigate any repository.');
+      return sendError(reply, 403, 'This public demo only investigates allow-listed repositories.', `Run ${PRODUCT_NAME} locally to investigate any repository.`);
     }
     const { investigation, duplicate } = await startFromGitHubRun(store, queue, github, ref, { mode: body.mode, repeat: body.repeat });
     return reply.status(duplicate ? 200 : 202).send({ ...investigation, duplicate });
+  });
+
+  // ------------------------------------------------------------- change verification
+  const Revision = z.string().trim().regex(/^[0-9a-fA-F]{7,40}$/, 'must be a commit SHA (7–40 hexadecimal characters)');
+  app.post('/api/verifications', async (req, reply) => {
+    if (!startLimit(req.ip)) return sendError(reply, 429, 'Too many investigations started from this address; try again later.');
+    const body = z
+      .object({
+        investigationId: z.string().regex(/^inv_[\w-]{1,64}$/).optional(),
+        scenarioId: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
+        repoUrl: z.string().url().max(300).optional(),
+        base: Revision.optional(),
+        head: Revision.optional(),
+        mode: ModeSchema,
+        repeat: RepeatSchema,
+      })
+      .strict()
+      .parse(req.body ?? {});
+    if (publicDemo && queue.depth >= 4) return sendError(reply, 503, 'The demo runner is busy; please retry in a minute.');
+    if (publicDemo && body.repoUrl) {
+      const ref = parseRepoUrl(body.repoUrl);
+      if (!ref || !store.listRepositories().some((r) => r.fullName.toLowerCase() === `${ref.owner}/${ref.repo}`.toLowerCase())) {
+        return sendError(reply, 403, 'This public demo only verifies changes in allow-listed repositories.', `Run ${PRODUCT_NAME} locally to verify any public repository.`);
+      }
+    }
+    const inv = await startChange(store, queue, body, { mode: body.mode, repeat: body.repeat });
+    return reply.status(202).send(inv);
+  });
+
+  app.get('/api/scenarios/:id/revisions', async (req) => {
+    const { id } = z.object({ id: z.string().regex(/^[a-z0-9-]{1,60}$/) }).parse(req.params);
+    return sampleRevisions(id);
   });
 
   app.post('/api/investigations/:id/rerun', async (req, reply) => {
@@ -217,9 +264,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const { id } = req.params as { id: string };
     const inv = store.getInvestigation(id);
     if (!inv) return sendError(reply, 404, 'Investigation not found');
+    // Same public-demo backpressure as the start routes: a re-run is a new investigation.
+    if (publicDemo && queue.depth >= 4) return sendError(reply, 503, 'The demo runner is busy; please retry in a minute.');
     const body = z.object({ mode: ModeSchema, repeat: RepeatSchema }).parse(req.body ?? {});
     const opts = { mode: body.mode ?? inv.options.requestedMode, repeat: body.repeat ?? inv.options.repeat };
     if (inv.source === 'demo' && inv.scenarioId) return reply.status(202).send(await startDemo(store, queue, inv.scenarioId, opts));
+    if (inv.source === 'change') return reply.status(202).send(await startChange(store, queue, { investigationId: inv.id }, opts));
     if (inv.runId) {
       const [owner, repo] = inv.repository.split('/');
       const ref = { owner, repo, runId: Number(inv.runId) };
@@ -248,7 +298,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const { id } = req.params as { id: string };
     const p = store.getPatch(id);
     if (!p) return sendError(reply, 404, 'Patch not found');
-    return reply.header('Content-Type', 'text/x-diff; charset=utf-8').header('Content-Disposition', `attachment; filename="alibi-${p.id}.diff"`).send(p.diff);
+    return reply.header('Content-Type', 'text/x-diff; charset=utf-8').header('Content-Disposition', `attachment; filename="${PRODUCT_NAME.toLowerCase()}-${p.id}.diff"`).send(p.diff);
   });
 
   app.post('/api/patches/:id/validate', async (req, reply) => {
@@ -259,10 +309,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const inv = store.getInvestigation(p.investigationId)!;
     if (inv.status === 'running' || inv.status === 'queued') return sendError(reply, 409, 'Wait for the investigation to finish before re-validating.');
     if (p.status === 'validating') return sendError(reply, 409, 'Validation is already running for this patch.');
+    // Re-validation runs sandboxes outside the investigation queue; on the public demo it is bounded too.
+    if (publicDemo && (queue.depth >= 4 || revalidations >= 1)) return sendError(reply, 503, 'The demo runner is busy; please retry in a minute.');
     const docker = await checkDocker();
     if (!docker.ok) return sendError(reply, 503, 'The sandbox runner is unavailable, so the fix cannot be validated.', docker.detail);
     store.updatePatch(p.id, { status: 'validating' });
-    void new InvestigationRun({ store, llm, github }, inv.id).revalidate(p.id);
+    revalidations++;
+    void new InvestigationRun({ store, llm, github }, inv.id).revalidate(p.id).finally(() => revalidations--);
     return reply.status(202).send(store.getPatch(p.id));
   });
 
@@ -287,12 +340,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const applied = await applyPatch(dir, p.diff);
       if (!applied.ok) return sendError(reply, 409, `Patch no longer applies: ${applied.detail}`);
       const files = p.files.filter((f) => existsSync(join(dir, f))).map((f) => ({ path: f, content: readFileSync(join(dir, f), 'utf8') }));
-      const branch = `alibi/${inv.id.slice(-8)}-${p.strategy.replace(/_/g, '-')}`;
+      const branch = `${PRODUCT_NAME.toLowerCase()}/${inv.id.slice(-8)}-${p.strategy.replace(/_/g, '-')}`;
       const pr = await github.createDraftPr({
         owner, repo, baseBranch: inv.branch ?? repoInfo.default_branch, baseSha: inv.commitSha, branch,
-        title: `[Alibi] ${p.title}`,
+        title: `[${PRODUCT_NAME}] ${p.title}`,
         body: [
-          `Proposed by Alibi after investigating ${inv.runUrl ?? `run ${inv.runId}`}.`,
+          `Proposed by ${PRODUCT_NAME} after investigating ${inv.runUrl ?? `run ${inv.runId}`}.`,
           '',
           `**Verdict:** ${inv.verdict} — ${inv.classification?.replace(/_/g, ' ')} (${inv.confidence?.label} evidence)`,
           `**Validation:** ${p.validation?.summary ?? 'n/a'}`,
@@ -408,7 +461,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return reply.status(204).send();
   });
 
-  app.post('/api/integrations/nebius/test', async (_req, reply) => {
+  app.post('/api/integrations/nebius/test', async (req, reply) => {
+    const refused = guardProviderTest(req, reply, 'Nebius');
+    if (refused) return refused;
     if (!llm.configured) return sendError(reply, 412, 'NEBIUS_API_KEY is not configured on the server.');
     const t0 = Date.now();
     const models = await llm.listModels(true);
@@ -431,7 +486,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return { ok: true, model, latencyMs: res.durationMs, response: res.data, resolved: { triage: models.triage, reasoning: models.reasoning, deep: models.deep }, notes: models.notes };
   });
 
-  app.post('/api/integrations/tavily/test', async (_req, reply) => {
+  app.post('/api/integrations/tavily/test', async (req, reply) => {
+    const refused = guardProviderTest(req, reply, 'Tavily');
+    if (refused) return refused;
     if (!tavilyConfigured()) return sendError(reply, 412, 'TAVILY_API_KEY is not configured on the server.');
     const res = await tavilySearch('GitHub Actions status incident history', { maxResults: 3 });
     return { ok: true, results: res.results.map((r) => ({ title: r.title, url: r.url })), responseTimeSec: res.responseTimeSec };

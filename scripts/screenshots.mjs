@@ -19,11 +19,14 @@ const maven = pick('maven-dependency');
 const bundle = flaky ? await (await fetch(`${base}/api/investigations/${flaky.id}`)).json() : null;
 const repeat = bundle?.experiments.find((e) => e.kind === 'repeat') ?? bundle?.experiments[0];
 const pages = [
-  ['overview', '/'],
+  ['landing', '/'],
+  ['docs', '/docs'],
+  ['overview', '/overview'],
   ['investigations', '/investigations'],
   ...(maven ? [['detail-maven', `/investigations/${maven.id}`]] : []),
   ...(flaky ? [['detail-flaky', `/investigations/${flaky.id}`], ['ledger', `/investigations/${flaky.id}/ledger`]] : []),
   ...(repeat ? [['experiment', `/investigations/${flaky.id}/experiments/${repeat.id}`]] : []),
+  ['verify', '/verify'],
   ['integrations', '/integrations'],
   ['settings', '/settings'],
 ];

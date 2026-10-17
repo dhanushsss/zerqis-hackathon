@@ -1,6 +1,6 @@
-# Alibi architecture
+# Zerqis architecture
 
-Alibi is a single Node.js service (Fastify API plus a React dashboard served as static files) backed by SQLite. It drives three external systems: **Nebius Token Factory** (Nemotron inference), **Tavily** (web search), and **GitHub** (runs, logs, diffs, webhooks, draft PRs). It also drives a local **Docker** daemon that executes experiments in throwaway containers.
+Zerqis is a single Node.js service (Fastify API plus a React dashboard served as static files) backed by SQLite. It drives three external systems: **Nebius Token Factory** (Nemotron inference), **Tavily** (web search), and **GitHub** (runs, logs, diffs, webhooks, draft PRs). It also drives a local **Docker** daemon that executes experiments in throwaway containers.
 
 ```mermaid
 flowchart LR
@@ -10,7 +10,7 @@ flowchart LR
     FX[Demo fixtures<br/>git repos + recorded CI logs]
   end
 
-  subgraph Alibi[Alibi service · Node 20]
+  subgraph Zerqis[Zerqis service · Node 20]
     API[Fastify API<br/>validation · rate limits]
     Q[Investigation queue<br/>persisted statuses]
     subgraph Pipeline
@@ -49,13 +49,17 @@ flowchart LR
 | Module | Responsibility |
 |---|---|
 | `analysis/redact.ts` | Removes tokens (GitHub, npm, Tavily, AWS, Slack, JWT, `sk-`), private keys, URL credentials, and `*_TOKEN/KEY/SECRET/PASSWORD=` values before anything is stored or sent |
-| `analysis/logs.ts` | Jest, Maven, and Mocha failure extraction, failure signature, long-log context selection, quote verification |
-| `analysis/diff.ts` | Changed files, docs-only detection, npm and Maven dependency version changes with exact lines |
+| `analysis/logs.ts` | Jest, Maven, pytest, Go, `tsc`, and Mocha failure extraction, failure signature, long-log context selection, quote verification |
+| `analysis/diff.ts` | Changed files, docs-only detection, npm, Maven, and PyPI (requirements files) dependency version changes with exact lines |
 | `llm/client.ts` | OpenAI-compatible Token Factory client: timeouts, retries, structured-output degradation, Zod validation and repair; disables Nemotron reasoning (`enable_thinking: false`) so output stays JSON |
 | `llm/models.ts` | Resolves a Nemotron model per role from the live `/v1/models` catalog |
 | `runner/docker.ts` | Hardened `docker run` for untrusted workloads; output caps; kill on timeout |
 | `runner/workspace.ts` | Clean checkout at a SHA (hooks disabled; fork-PR SHAs fetched), dependency install, patch policy, `git apply` |
-| `runner/frameworks.ts` | Fixed command templates for Jest and Maven, selection validation, result parsing (Jest JSON, Surefire XML) |
+| `runner/frameworks.ts` | Fixed command templates for Jest, Maven, pytest, Go, and `tsc` checks, selection validation, result parsing (Jest JSON, Surefire XML) |
+| `runner/typescript.ts` | TypeScript policy for Jest projects: supported-layout check with explicit reasons (single package, ts-jest or Babel), `tsc` diagnostics parsing |
+| `runner/golang.ts` | Go policy: supported-layout check (single root module, no go.work/vendor/local replaces), `go test -json` parsing, package and test-name validation, test-file lookup for quarantine |
+| `runner/python.ts` | pytest policy: supported-layout check with explicit reasons, requirements-line allowlist (PyPI names, versions, markers only), JUnit XML parsing into node IDs |
+| `pipeline/change.ts` | Change verification rules: revision resolution, test-scope checks (shrunk scope, edited or skipped tests), outcome and fix-outcome decisions, the not-examined list |
 | `pipeline/investigate.ts` | Orchestrates the six stages, writes the Evidence Ledger, manages live, replay, and heuristic modes |
 | `pipeline/effects.ts` | Deterministic rules mapping experiment outcomes to *supports / contradicts* per hypothesis category |
 | `pipeline/confidence.ts` | Evidence rubric and verdict capping |
@@ -98,16 +102,17 @@ Live mode was verified on 2026-10-16 with the three models above; see `docs/veri
 - **Container isolation.** uid 1000, `--cap-drop ALL`, `no-new-privileges`, `--read-only` with tmpfs `/tmp`, `--pids-limit 512`, memory and swap and CPU limits, `--network none` for every test run, a timeout with `docker kill`, and capped output. Only the workspace and a per-repository dependency cache are mounted. The host environment, credentials, and Docker socket are never passed in.
 - **Install phase.** `npm ci --ignore-scripts`; Maven `dependency:go-offline` plus explicit Surefire provider and JUnit launcher resolution, so no test code runs while the network is enabled.
 - **Host-side git.** Hooks, fsmonitor, and LFS filters are disabled; no credential prompts; only `https://github.com/<owner>/<repo>` or local paths may be cloned; SHAs are validated.
-- **Patch policy.** Patches may not touch `.git/`, `.github/`, `.npmrc`, `.mvn/`, or `.env*`. They may not traverse paths, change modes, add binaries, symlinks, or renames, or exceed 64 KiB. Model edits may only touch the files the model was shown.
+- **Patch policy.** Patches may not touch `.git/`, `.github/`, `.npmrc`, `.mvn/`, or `.env*`. They may not traverse paths, change modes, add binaries, symlinks, or renames, or exceed 64 KiB. Model edits may only touch the non-test files the model was shown. Because candidates are applied before the network-enabled install step, patches may not add Maven build plugins, extensions, or repositories, or point npm dependencies or lockfile entries at non-registry sources.
 - **Webhooks.** HMAC-SHA256 checked with `timingSafeEqual` against the raw body; unknown events ignored; delivery IDs deduplicated.
 - **Model output.** Schema-validated, length-bounded, and treated as claims: cited quotes are verified, and verdicts are capped by the evidence rubric.
-- **Public demo mode.** Per-IP rate limits, queue cap, no deletes, no settings changes, no PRs, and GitHub intake only for allow-listed repositories.
+- **Public demo mode.** Per-IP rate limits, queue cap, no deletes, no settings changes, no PRs, no provider connection tests, and GitHub intake only for allow-listed repositories.
+- **Client identity.** `X-Forwarded-For` is honoured only from proxies listed in `ALIBI_TRUST_PROXY` (default: none), so clients cannot spoof their address to evade per-IP limits. `deploy/setup-vm.sh` sets it to `127.0.0.1` for the bundled Caddy proxy.
 
 **Known limitations**
 - Docker containers share the host kernel; they are not a VM boundary. For untrusted repositories at scale, use gVisor/Kata, rootless Docker, or a remote sandbox such as Nebius Token Factory Sandboxes.
 - The install phase has network access, and Maven plugins declared by the repository execute during `dependency:go-offline`. Use a pull-through registry mirror and egress allow-list in production.
-- The Alibi service itself needs access to the Docker daemon, so run it under a dedicated user on a dedicated VM.
-- The sandbox image differs from the CI runner image, and Alibi records this as an explicit *assumption* in every ledger.
+- The Zerqis service itself needs access to the Docker daemon, so run it under a dedicated user on a dedicated VM.
+- The sandbox image differs from the CI runner image, and Zerqis records this as an explicit *assumption* in every ledger.
 
 ## Deployment
 

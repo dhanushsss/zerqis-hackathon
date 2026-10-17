@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { CLASS_LABEL, Empty, ErrorBox, Icon, Loading } from '../components/ui';
+import { BRAND } from '../brand';
 import { useApi } from '../hooks';
 import { RecentTable } from './Overview';
 
@@ -42,7 +43,7 @@ export function Investigations() {
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div>
           <h1>Investigations</h1>
-          <p className="lead">Every failed build Alibi has investigated, with its verdict and how it was reached.</p>
+          <p className="lead">Every failed build {BRAND.name} has investigated, with its verdict and how it was reached.</p>
         </div>
       </div>
 
@@ -79,6 +80,7 @@ export function Investigations() {
               <option value="">All sources</option>
               <option value="github">GitHub</option>
               <option value="demo">Demo fixtures</option>
+              <option value="change">Change verifications</option>
             </select>
             {active && (
               <button

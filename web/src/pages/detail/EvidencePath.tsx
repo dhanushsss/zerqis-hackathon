@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Bundle } from '../../api';
+import { BRAND } from '../../brand';
 import { AttemptStrip, Badge, CLASS_LABEL, Icon, KIND, Sha, useChangeFlash } from '../../components/ui';
 import { buildEvidencePath, COLUMN_TITLE, edgesFor, validationExperiments, type EvidencePathModel, type PathNode, type PathState } from './evidencePathModel';
 
@@ -91,13 +92,13 @@ function Details({ model, node, b, onSelect }: { model: EvidencePathModel; node:
       <>
         <div className="signature">{inv.failureSignature ?? 'Signature not extracted yet.'}</div>
         <p className="small muted">
-          Commit <Sha sha={inv.commitSha} n={10} /> · parsed deterministically from the CI log{inv.logStats ? ` (${inv.logStats.totalLines.toLocaleString()} lines)` : ''}.
+          Commit <Sha sha={inv.commitSha} n={10} /> · parsed deterministically from the {inv.change ? 'sandbox test output' : 'CI log'}{inv.logStats ? ` (${inv.logStats.totalLines.toLocaleString()} lines)` : ''}.
         </p>
       </>
     );
     actions = (
       <Link className="btn btn-sm" to={`${base}/log`}>
-        <Icon name="terminal" /> Open CI log
+        <Icon name="terminal" /> {inv.change ? 'Open test output' : 'Open CI log'}
       </Link>
     );
   } else if (node.kind === 'observed_fact') {
@@ -176,7 +177,7 @@ function Details({ model, node, b, onSelect }: { model: EvidencePathModel; node:
             <span className="muted">A diagnosis is about the cause. Whether a fix works is shown separately under Remediation.</span>
           </>
         ) : (
-          <span className="muted">Alibi issues no verdict until experiments have run.</span>
+          <span className="muted">{BRAND.name} issues no verdict until experiments have run.</span>
         )}
       </div>
     );

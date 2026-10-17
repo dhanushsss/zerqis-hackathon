@@ -1,5 +1,7 @@
 # Alibi: independent engineering audit and hackathon readiness review
 
+> **Naming note (2026-10-17):** the product is now called **Zerqis**. This is a historical record written when it was named Alibi; names, commands, and identifiers below are left as they were.
+
 **Date:** 2026-10-16 · **Mode:** read-only. No paid APIs were called, no scenarios were run, and no existing file was changed.
 **Evidence labels:** [code] = direct source inspection · [recorded] = persisted runtime evidence in `data/verify.db` and `docs/verification/traces/` · [run-now] = executed during this audit · [claim] = stated in docs, not independently verified here.
 

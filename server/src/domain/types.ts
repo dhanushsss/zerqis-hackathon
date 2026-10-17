@@ -12,11 +12,50 @@ export const VERDICTS = ['confirmed', 'probable', 'inconclusive'] as const;
 export type Verdict = (typeof VERDICTS)[number];
 
 export type InvestigationStatus = 'queued' | 'running' | 'completed' | 'inconclusive' | 'failed';
-export type InvestigationSource = 'demo' | 'github';
+/** demo: a sample failure · github: a failed Actions run · change: verification of a base/head revision pair. */
+export type InvestigationSource = 'demo' | 'github' | 'change';
+
+/**
+ * Change verification outcome, about the change's behaviour within the tests that ran.
+ * Alibi does not detect or infer who (or which agent) authored a change.
+ */
+export type ChangeOutcome = 'regression' | 'no_regression_observed' | 'inconclusive' | 'blocked';
+
+export interface ChangeRevisionRun {
+  revision: 'base' | 'head';
+  sha: string;
+  experimentId: string;
+  status: 'passed' | 'failed' | 'error' | 'skipped';
+  tests: TestCounts | null;
+}
+
+export interface ChangeVerification {
+  /** Where the revisions come from. A sample is one of Alibi's fixture repositories. */
+  origin: { kind: 'sample'; scenarioId: string } | { kind: 'github'; url: string };
+  /** The investigation this verification was started from, if any. */
+  fromInvestigationId: string | null;
+  /** Revisions exactly as requested, before resolution. */
+  requested: { base: string; head: string };
+  baseSha: string | null;
+  headSha: string | null;
+  outcome: ChangeOutcome | null;
+  outcomeDetail: string | null;
+  /** Candidate-fix outcome, independent of the diagnosis. VALIDATED only after fresh-sandbox validation passed. */
+  fix: 'VALIDATED' | 'REJECTED' | 'NONE' | null;
+  /** The full-suite runs at each revision that define the scope of the conclusion. */
+  examined: ChangeRevisionRun[];
+  /** What was not examined, stated explicitly. */
+  notTested: string[];
+  /** Files changed between base and head (numstat). */
+  changedFiles?: Array<{ path: string; additions: number; deletions: number }>;
+  /** Unified diff base..head, truncated for analysis and display. */
+  diff?: string;
+  diffTruncated?: boolean;
+}
 /** How model-dependent steps were produced. */
 export type ReasoningMode = 'live' | 'replay' | 'heuristic';
-/** Frameworks Alibi can parse. Only jest and maven have sandbox experiment support. */
-export type Framework = 'jest' | 'maven' | 'mocha' | 'unknown';
+/** Frameworks Alibi can parse. Jest (including TypeScript projects), Maven, pytest, and Go have sandbox experiment support. */
+export type Framework = 'jest' | 'maven' | 'pytest' | 'go' | 'mocha' | 'unknown';
 
 export type ConfidenceLabel = 'strong' | 'moderate' | 'weak' | 'none';
 
@@ -82,6 +121,8 @@ export interface Investigation {
     /** About candidate fixes, independent of the diagnosis: VERIFIED only after fresh-sandbox validation passed. */
     fix: 'VERIFIED' | 'REJECTED' | 'NONE';
   };
+  /** Present only for change verifications (source "change"). */
+  change?: ChangeVerification;
   /** Artifacts listed by the CI provider (names and sizes; not downloaded). */
   artifacts: Array<{ name: string; sizeInBytes: number; expired: boolean }>;
 }

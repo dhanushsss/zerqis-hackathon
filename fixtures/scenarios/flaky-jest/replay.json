@@ -1,0 +1,164 @@
+{
+  "scenarioId": "flaky-jest",
+  "recordedAt": "2026-10-16T03:56:58.074Z",
+  "investigationId": "inv_mvafruodc197d442",
+  "baseUrl": "https://api.tokenfactory.nebius.com/v1",
+  "steps": {
+    "triage": {
+      "model": "nvidia/Nemotron-3_5-Lightning",
+      "output": {
+        "summary": "The test `planDeliveries delivers notifications in submission order` fails because the received array has `order.created` moved after `order.paid`. The diff shows only a README documentation addition. The test uses a deterministic seed (1849273600).",
+        "failure_signature": "jest: test/retryQueue.test.js › planDeliveries delivers notifications in submission order — expect(received).toEqual(expected) // deep equality",
+        "failing_tests": [],
+        "environment_clues": [],
+        "implicated_dependencies": [],
+        "hypotheses": [
+          {
+            "id": "H1",
+            "cause": "Code regression: recent commit introduced non-deterministic ordering in `planDeliveries` despite only README changes.",
+            "category": "code_regression",
+            "supporting_evidence": [
+              {
+                "quote": "FAIL test/retryQueue.test.js\n  ● planDeliveries › delivers notifications in submission order\n\n    expect(received).toEqual(expected) // deep equality\n\n    - Expected  - 1\n    + Received  + 1\n\n      Array [\n    -   \"order.created\",\n        \"order.paid\",\n    +   \"order.created\",\n      ]",
+                "line": 28
+              },
+              {
+                "quote": "diff --git a/README.md b/README.md\nindex 394ffe1..1e84d81 100648\n--- a/README.md\n+++ b/README.md\n@@ -6,3 +6,9 @@ Cart totals and outbound webhook delivery for the checkout flow.\n npm ci\n npm test\n ```\n+\n+## Retry queue\n\n+`planDeliveries` spreads webhook deliveries with a base delay (`baseDelayMs`,\n+default 10 ms), a per-position step (`stepMs`, default 2 ms) and random jitter\n+(`jitterMs`, default 5 ms). Tune these per downstream service.\n",
+                "line": 31
+              }
+            ],
+            "contradicting_evidence": [
+              {
+                "quote": "commit message: docs: document retry queue tuning knobs",
+                "line": 1
+              },
+              {
+                "quote": "dependency changes: []",
+                "line": 1
+              }
+            ],
+            "prior": "high",
+            "experiments": [],
+            "next_experiment": "compare_parent: run test at parent commit 33b2d8e8be3c3016c16b503e33a83136a3e86f6e to check if failure is regression or pre-existing."
+          },
+          {
+            "id": "H2",
+            "cause": "Flaky test: ordering depends on timing (delays/jitter) and seed 1849273600 produced an unlucky ordering in this run.",
+            "category": "flaky_test",
+            "supporting_evidence": [
+              {
+                "quote": "FAIL test/retryQueue.test.js\n  ● planDeliveries › delivers notifications in submission order\n\n    expect(received).toEqual(expected) // deep equality\n\n    - Expected  - 1\n    + Received  + 1\n\n      Array [\n    -   \"order.created\",\n        \"order.paid\",\n    +   \"order.created\",\n      ]",
+                "line": 28
+              },
+              {
+                "quote": "Seed:        1849273600",
+                "line": 49
+              }
+            ],
+            "contradicting_evidence": [
+              {
+                "quote": "commit message: docs: document retry queue tuning knobs",
+                "line": 1
+              }
+            ],
+            "prior": "medium",
+            "experiments": [],
+            "next_experiment": "repeat: run the failing test many times at the failing commit to measure intermittency rate."
+          },
+          {
+            "id": "H3",
+            "cause": "Dependency/environment change: Node.js v20 or Jest version difference introduced non-deterministic scheduling affecting delivery order.",
+            "category": "dependency_regression",
+            "supporting_evidence": [
+              {
+                "quote": "workflow: CI; job: test (node 20)",
+                "line": 1
+              },
+              {
+                "quote": "FAIL test/retryQueue.test.js\n  ● planDeliveries › delivers notifications in submission order\n\n    expect(received).toEqual(expected) // deep equality\n\n    - Expected  - 1\n    + Received  + 1\n\n      Array [\n    -   \"order.created\",\n        \"order.paid\",\n    +   \"order.created\",\n      ]",
+                "line": 28
+              }
+            ],
+            "contradicting_evidence": [
+              {
+                "quote": "commit message: docs: document retry queue tuning knobs",
+                "line": 1
+              }
+            ],
+            "prior": "low",
+            "experiments": [],
+            "next_experiment": "external_search: search for known issues with Jest/Node 20 and non-deterministic test ordering."
+          },
+          {
+            "id": "H4",
+            "cause": "Infrastructure/GitHub Actions runner variability: runner load affected timing of async deliveries, causing order swap.",
+            "category": "infrastructure",
+            "supporting_evidence": [
+              {
+                "quote": "FAIL test/retryQueue.test.js\n  ● planDeliveries › delivers notifications in submission order\n\n    expect(received).toEqual(expected) // deep equality\n\n    - Expected  - 1\n    + Received  + 1\n\n      Array [\n    -   \"order.created\",\n        \"order.paid\",\n    +   \"order.created\",\n      ]",
+                "line": 28
+              }
+            ],
+            "contradicting_evidence": [
+              {
+                "quote": "commit message: docs: document retry queue tuning knobs",
+                "line": 1
+              },
+              {
+                "quote": "Time:        0.442 s",
+                "line": 50
+              }
+            ],
+            "prior": "low",
+            "experiments": [],
+            "next_experiment": "compare_parent: run test at parent commit to isolate infrastructure effects."
+          }
+        ],
+        "search_queries": [
+          "jest node 20 non-deterministic test ordering",
+          "retry queue flaky test webhook delivery order"
+        ]
+      },
+      "recordedAt": "2026-10-16T03:57:03.382Z"
+    },
+    "verdict": {
+      "model": "nvidia/nemotron-3-super-120b-a12b",
+      "output": {
+        "classification": "flaky_test",
+        "verdict": "probable",
+        "summary": "Test shows intermittent failures under same commit (2/10 runs fail). Parent commit also exhibits similar instability (2/3 runs fail), indicating the flakiness predates the current commit. No deterministic cause identified; timing/jitter likely culprit.",
+        "primary_hypothesis": "H2",
+        "hypotheses": [
+          {
+            "id": "H1",
+            "status": "refuted",
+            "assessment": "Parent commit also fails (2/3), ruling out code regression from current docs-only commit."
+          },
+          {
+            "id": "H2",
+            "status": "supported",
+            "assessment": "Intermittent failure pattern consistent with flaky test due to timing/jitter; repeat experiment shows 20% failure rate."
+          },
+          {
+            "id": "H3",
+            "status": "inconclusive",
+            "assessment": "External search only; no experiment testing Node/Jest version impact."
+          },
+          {
+            "id": "H4",
+            "status": "inconclusive",
+            "assessment": "No experiment varying runner load to test infrastructure hypothesis."
+          }
+        ],
+        "recommended_action": "quarantine",
+        "remediation_type": "quarantine",
+        "limitations": [
+          "Small sample size for parent commit comparison (n=3).",
+          "No direct manipulation of jitter/delay parameters to confirm timing sensitivity.",
+          "Environmental factors like runner load not systematically varied."
+        ]
+      },
+      "recordedAt": "2026-10-16T03:57:27.430Z"
+    }
+  }
+}

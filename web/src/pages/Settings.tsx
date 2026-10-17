@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type Settings } from '../api';
 import { Callout, ErrorBox, Icon, Loading, useToast } from '../components/ui';
+import { BRAND } from '../brand';
 import { useApi } from '../hooks';
 
 type Form = Pick<Settings, 'repeatDefault' | 'defaultMode' | 'autoInvestigate'>;
@@ -39,7 +40,7 @@ export function SettingsPage() {
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div>
           <h1>Settings</h1>
-          <p className="lead">Non-secret defaults stored in Alibi's database. API keys are configured only through server environment variables.</p>
+          <p className="lead">Non-secret defaults stored in {BRAND.name}'s database. API keys are configured only through server environment variables.</p>
         </div>
       </div>
       {data.readOnly && (

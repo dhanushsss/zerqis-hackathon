@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { api, type Scenario } from '../api';
 import { useApi } from '../hooks';
 import { Badge, ErrorBox, EXP_KIND, Icon, Loading, useToast } from './ui';
+import { BRAND } from '../brand';
 
 const ONE_LINER: Record<string, string> = {
   'flaky-jest': 'A docs-only commit turned CI red: is the change guilty, or is the test flaky?',
   'maven-dependency': 'A Dependabot bump to Guava 21.0 broke compilation: which change, and what fixes it?',
-  'code-regression': 'A refactor broke the $100 discount boundary: can Alibi prove it and validate a fix?',
+  'code-regression': `A refactor broke the $100 discount boundary: can ${BRAND.name} prove it and validate a fix?`,
 };
 
 export function ScenarioPicker({ onStarted }: { onStarted?: () => void }) {
@@ -61,7 +62,7 @@ export function ScenarioPicker({ onStarted }: { onStarted?: () => void }) {
           <article key={s.id} className="card interactive scenario" aria-labelledby={`sc-${s.id}`}>
             <div className="row-wrap">
               <Badge tone="tone-outline" icon="box">
-                {s.framework === 'maven' ? 'Maven' : 'Jest'}
+                {s.framework === 'maven' ? 'Maven' : s.framework === 'pytest' ? 'pytest' : 'Jest'}
               </Badge>
               <span className="mono xs faint truncate">{s.repository}</span>
             </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Experiment, Hypothesis, Patch } from '../domain/types.js';
-import { assessConfidence, reconcileVerdict, remediationSummary } from './confidence.js';
+import { assessConfidence, guardHypothesisStatus, reconcileVerdict, remediationSummary } from './confidence.js';
 import { experimentEffect } from './effects.js';
 import { attemptSeed } from './experiments.js';
 import { heuristicTriage } from './heuristic.js';
@@ -62,6 +62,23 @@ describe('confidence and verdict reconciliation', () => {
     expect(reconcileVerdict('probable', { label: 'none', basis: [] })).toMatchObject({ verdict: 'inconclusive', adjusted: true });
     expect(reconcileVerdict('confirmed', { label: 'strong', basis: [] })).toMatchObject({ verdict: 'confirmed', adjusted: false });
   });
+  it('regression (QA A5 probe): a hypothesis is "supported" only when an experiment supports it', () => {
+    expect(guardHypothesisStatus('supported', 'model says so', { s: 0, c: 0 })).toEqual({ status: 'inconclusive', assessment: expect.stringContaining('no executed experiment supports this hypothesis') });
+    expect(guardHypothesisStatus('supported', null, { s: 0, c: 2 }).assessment).toMatch(/contradict this hypothesis and none support it/);
+    expect(guardHypothesisStatus('supported', 'ok', { s: 1, c: 1 })).toEqual({ status: 'supported', assessment: 'ok' });
+    expect(guardHypothesisStatus('refuted', 'x', { s: 0, c: 0 })).toEqual({ status: 'refuted', assessment: 'x' });
+  });
+  it('regression (QA A5): over-claiming without evidence never yields a stronger verdict than a modest claim', () => {
+    for (const claim of ['confirmed', 'probable'] as const) {
+      expect(reconcileVerdict(claim, { label: 'none', basis: [] })).toMatchObject({ verdict: 'inconclusive', adjusted: true });
+    }
+    const order = { inconclusive: 0, probable: 1, confirmed: 2 } as const;
+    for (const label of ['none', 'weak', 'moderate', 'strong'] as const) {
+      const v = (c: 'confirmed' | 'probable' | 'inconclusive') => order[reconcileVerdict(c, { label, basis: [] }).verdict];
+      expect(v('confirmed')).toBeGreaterThanOrEqual(v('probable'));
+      if (label === 'none') expect(v('confirmed')).toBe(v('probable'));
+    }
+  });
   it('flags small flake samples as uncertain', () => {
     const c = assessConfidence({ classification: 'flaky_test', experiments: [exp('repeat', [true, false, true, true, true, true, true, true, true, true])], patches: [], dependencyChanged: false, docsOnlyChange: true, corroboratingSources: 0 });
     expect(c.basis.join(' ')).toMatch(/Sample size is 10/);
@@ -86,7 +103,7 @@ describe('remediation candidates', () => {
     const c = quarantineCandidate({ testFile: 't.test.js', testFullName: 'suite delivers in order', content, investigationId: 'inv_1', failureSummary: 'failed 2/10' })!;
     expect(c.edits[0].content).toContain("test.skip('delivers in order'");
     expect(c.edits[0].content).toContain("test('a'");
-    expect(c.edits[0].content).toContain('Quarantined by Alibi (investigation inv_1)');
+    expect(c.edits[0].content).toContain('Quarantined by Zerqis (investigation inv_1)');
   });
   it('pins the exact changed dependency line', () => {
     const diff = analyzeDiff('diff --git a/pom.xml b/pom.xml\n-  <guava.version>20.0</guava.version>\n+  <guava.version>21.0</guava.version>\n', '1\t1\tpom.xml');

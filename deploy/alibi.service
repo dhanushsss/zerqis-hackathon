@@ -1,5 +1,5 @@
 [Unit]
-Description=Alibi CI failure forensics
+Description=Zerqis evidence-driven CI investigation
 After=network-online.target docker.service
 Requires=docker.service
 

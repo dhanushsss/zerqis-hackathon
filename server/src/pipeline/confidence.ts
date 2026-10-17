@@ -1,5 +1,6 @@
 import { pct } from '../analysis/stats.js';
-import type { Classification, ConfidenceAssessment, Experiment, Patch, Verdict } from '../domain/types.js';
+import type { Classification, ConfidenceAssessment, Experiment, HypothesisStatus, Patch, Verdict } from '../domain/types.js';
+import { PRODUCT_NAME } from '../brand.js';
 
 /**
  * Confidence is derived from which discriminating experiments actually ran and
@@ -77,13 +78,30 @@ export function assessConfidence(args: {
   return { label, basis };
 }
 
+/**
+ * Deterministic guard on the model's hypothesis status: "supported" requires at least one
+ * executed experiment that the effect rules recorded as supporting it (`tally.s`). Otherwise
+ * the status is downgraded to inconclusive with an explanation. Other statuses pass through.
+ */
+export function guardHypothesisStatus(
+  status: HypothesisStatus,
+  assessment: string | null,
+  tally: { s: number; c: number },
+): { status: HypothesisStatus; assessment: string | null } {
+  if (status !== 'supported' || tally.s > 0) return { status, assessment };
+  const why = tally.c > 0 ? 'experiments contradict this hypothesis and none support it' : 'no executed experiment supports this hypothesis';
+  return { status: 'inconclusive', assessment: `${assessment ?? ''} [${PRODUCT_NAME}: downgraded — ${why}.]`.trim() };
+}
+
 /** Caps a model's verdict at what the evidence rubric allows. */
 export function reconcileVerdict(modelVerdict: Verdict, confidence: ConfidenceAssessment): { verdict: Verdict; adjusted: boolean; reason?: string } {
-  if (modelVerdict === 'confirmed' && confidence.label !== 'strong') {
-    return { verdict: 'probable', adjusted: true, reason: `"Confirmed" requires strong experimental evidence; the evidence rubric rates it ${confidence.label}.` };
-  }
+  // Checked first: without deterministic evidence no model claim may lift the verdict above
+  // inconclusive. (A stronger claim must never yield a stronger verdict than a weaker one.)
   if (modelVerdict !== 'inconclusive' && confidence.label === 'none') {
     return { verdict: 'inconclusive', adjusted: true, reason: 'No discriminating experiment completed.' };
+  }
+  if (modelVerdict === 'confirmed' && confidence.label !== 'strong') {
+    return { verdict: 'probable', adjusted: true, reason: `"Confirmed" requires strong experimental evidence; the evidence rubric rates it ${confidence.label}.` };
   }
   return { verdict: modelVerdict, adjusted: false };
 }

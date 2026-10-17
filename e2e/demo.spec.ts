@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('a sample investigation runs end to end: hypotheses → sandbox experiments → validated fix → verdict', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/overview');
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Investigate Discount boundary regression in pricing-engine' }).click();
@@ -44,7 +44,7 @@ test('a sample investigation runs end to end: hypotheses → sandbox experiments
 
 test('mobile navigation drawer opens and navigates', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/overview');
   const menu = page.getByRole('button', { name: 'Open navigation' });
   await menu.click();
   await expect(menu).toHaveAttribute('aria-expanded', 'true');
@@ -62,4 +62,17 @@ test('mobile navigation drawer opens and navigates', async ({ page }) => {
     const pathOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(pathOverflow).toBeLessThanOrEqual(1);
   }
+});
+
+test('the public landing page links into the product without calling the API', async ({ page }) => {
+  const api: string[] = [];
+  page.on('request', (r) => new URL(r.url()).pathname.startsWith('/api/') && api.push(r.url()));
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: "Don't just explain the failure. Prove it." })).toBeVisible();
+  await expect(page.locator('#sample').getByText('Sample investigation')).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  expect(api).toEqual([]);
+  await page.getByRole('link', { name: 'Explore the product' }).click();
+  await expect(page).toHaveURL(/\/overview$/);
+  await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
 });

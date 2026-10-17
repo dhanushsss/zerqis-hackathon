@@ -12,22 +12,28 @@ import { Ledger } from './detail/Ledger';
 import { Remediation } from './detail/Remediation';
 import { LogTab, ModelCalls, Sources } from './detail/Tabs';
 import { Verdict } from './detail/Verdict';
+import { ChangeVerificationPanel } from './detail/ChangeVerification';
 
 function Summary({ b, publicDemo }: { b: Bundle; publicDemo: boolean }) {
   const inv = b.investigation;
   const base = `/investigations/${inv.id}`;
+  const change = inv.change;
+  // A change that ended without a diagnosis (blocked, or no failing test) has no verdict, hypotheses, or fixes to show.
+  const diagnosed = !change || Boolean(inv.verdict) || !change.outcome;
   return (
     <div className="stack">
-      <EvidencePath b={b} />
-      <Verdict b={b} />
+      {change && <ChangeVerificationPanel b={b} />}
+      {/* Answer first, then what failed, then the chain of evidence behind the answer. */}
+      {diagnosed && <Verdict b={b} />}
+      {diagnosed && (
       <section aria-labelledby="sig-title">
         <SectionHead
           id="sig-title"
           title="Failure signature"
-          hint="Parsed deterministically from the CI log"
+          hint={change ? 'Parsed deterministically from the sandbox test output at the changed revision' : 'Parsed deterministically from the CI log'}
           action={
             <Link to={`${base}/log`} className="small">
-              Open CI log
+              {change ? 'Open test output' : 'Open CI log'}
             </Link>
           }
         />
@@ -38,6 +44,9 @@ function Summary({ b, publicDemo }: { b: Bundle; publicDemo: boolean }) {
           </p>
         )}
       </section>
+      )}
+      <EvidencePath b={b} />
+      {diagnosed && (
       <section aria-labelledby="hyp-title">
         <SectionHead id="hyp-title" title="Competing hypotheses" hint="Each must survive an experiment" />
         {b.hypotheses.length ? (
@@ -48,6 +57,7 @@ function Summary({ b, publicDemo }: { b: Bundle; publicDemo: boolean }) {
           </div>
         )}
       </section>
+      )}
       <section aria-labelledby="exp-title">
         <SectionHead
           id="exp-title"
@@ -63,10 +73,12 @@ function Summary({ b, publicDemo }: { b: Bundle; publicDemo: boolean }) {
           <ExperimentList b={b} filter={isDiagnostic} />
         </div>
       </section>
-      <section aria-labelledby="remediation" id="remediation-section">
-        <SectionHead id="remediation" title="Remediation" hint="A fix is validated only if the failing tests and the regression suite pass" />
-        <Remediation b={b} publicDemo={publicDemo} />
-      </section>
+      {diagnosed && (
+        <section aria-labelledby="remediation" id="remediation-section">
+          <SectionHead id="remediation" title="Remediation" hint="A fix is validated only if the failing tests and the regression suite pass" />
+          <Remediation b={b} publicDemo={publicDemo} />
+        </section>
+      )}
     </div>
   );
 }
@@ -112,7 +124,7 @@ export function InvestigationDetail() {
           {tab(`/investigations/${id}/ledger`, 'Evidence ledger', counts?.ledger)}
           {tab(`/investigations/${id}/experiments`, 'Experiments', counts?.experiments)}
           {tab(`/investigations/${id}/sources`, 'Sources', counts?.sources)}
-          {tab(`/investigations/${id}/log`, 'CI log')}
+          {tab(`/investigations/${id}/log`, inv.change ? 'Test output' : 'CI log')}
           {tab(`/investigations/${id}/models`, 'Model calls', counts?.models)}
         </nav>
         <Routes>

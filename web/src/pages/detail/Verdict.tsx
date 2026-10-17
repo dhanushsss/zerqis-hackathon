@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { Bundle } from '../../api';
+import { BRAND } from '../../brand';
 import { AttemptStrip, Badge, CLASS_LABEL, ConfidenceBadge, EXP_KIND, Icon, VerdictBadge } from '../../components/ui';
 import { AgentOutcome } from './AgentOutcome';
 import { counterEvidence, observationsBetween, strongestSupport } from './derive';
@@ -23,7 +24,7 @@ export function Verdict({ b }: { b: Bundle }) {
           </Badge>
         </div>
         <p className="small muted" style={{ marginTop: 8 }}>
-          Alibi issues no verdict until experiments have run. Until then, the hypotheses below are unproven claims.
+          {BRAND.name} issues no verdict until experiments have run. Until then, the hypotheses below are unproven claims.
         </p>
       </section>
     );

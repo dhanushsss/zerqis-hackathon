@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Alibi \u2014 CI failure forensics. Don't just explain the failure. Prove it.",
+  "description": "Zerqis \u2014 evidence-driven CI investigation. Don't just explain the failure. Prove it.",
   "license": "MIT",
   "workspaces": [
     "server",

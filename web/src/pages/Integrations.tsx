@@ -2,6 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, type Status } from '../api';
 import { Badge, Callout, CopyButton, Empty, ErrorBox, Icon, Loading, TimeAgo, useToast } from '../components/ui';
+import { BRAND } from '../brand';
 import { useApi } from '../hooks';
 
 type Health = 'ok' | 'unconfigured' | 'error' | 'configured';
@@ -220,7 +221,7 @@ function InvestigateRun({ s }: { s: Status }) {
           </span>
         ) : (
           <span className="field-help" id="run-url-help">
-            {s.github.configured ? 'Sandbox experiments clone public repositories at the failing commit. Jest and Maven are supported.' : 'Requires GITHUB_TOKEN on the server.'}
+            {s.github.configured ? 'Sandbox experiments clone public repositories at the failing commit. Jest, Maven, and pytest (requirements.txt layout) are supported.' : 'Requires GITHUB_TOKEN on the server.'}
           </span>
         )}
       </label>
@@ -357,7 +358,7 @@ export function Integrations() {
           ]}
           test={{ label: 'Check Docker', run: api.testRunner, summarize: (r) => r?.detail ?? '' }}
           troubleshooting={[
-            'Start Docker Desktop, Rancher Desktop, or Docker Engine, and confirm `docker version` works for the user running Alibi.',
+            `Start Docker Desktop, Rancher Desktop, or Docker Engine, and confirm \`docker version\` works for the user running ${BRAND.name}.`,
             'Pre-pull the runner images to avoid a slow first investigation.',
             'Containers run as uid 1000 with no capabilities, a read-only root, and no network during tests. Only the workspace is mounted.',
           ]}
@@ -377,7 +378,7 @@ export function Integrations() {
             summarize: (r) => `${r?.results?.length ?? 0} results in ${r?.responseTimeSec ?? '?'} s.`,
             disabledReason: s.tavily.configured ? undefined : 'Add TAVILY_API_KEY first',
           }}
-          troubleshooting={['401: the key is invalid.', '432/433: plan or usage limit reached.', 'Results are leads only; Alibi never treats a search result as proof.']}
+          troubleshooting={['401: the key is invalid.', '432/433: plan or usage limit reached.', `Results are leads only; ${BRAND.name} never treats a search result as proof.`]}
         />
 
         <IntegrationCard

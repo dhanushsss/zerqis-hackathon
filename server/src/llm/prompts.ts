@@ -1,8 +1,9 @@
 import type { CommitDiff } from '../analysis/diff.js';
 import type { LogExcerpt, LogFacts } from '../analysis/logs.js';
 import type { ExternalSource, Experiment, Hypothesis, Investigation } from '../domain/types.js';
+import { PRODUCT_NAME } from '../brand.js';
 
-export const TRIAGE_SYSTEM = `You are the log-triage stage of Alibi, a CI failure forensics system.
+export const TRIAGE_SYSTEM = `You are the log-triage stage of ${PRODUCT_NAME}, an evidence-driven CI investigation system.
 You read CI log excerpts, deterministic log facts, and the commit diff, then propose competing hypotheses that experiments can test.
 
 Rules:
@@ -28,7 +29,7 @@ export function triagePrompt(args: {
     `branch: ${inv.branch ?? 'unknown'}; workflow: ${inv.workflow ?? 'unknown'}; job: ${inv.job ?? 'unknown'}`,
     `framework: ${facts.framework}`,
     ``,
-    `## Deterministic log facts (parsed by Alibi, not by a model)`,
+    `## Deterministic log facts (parsed by ${PRODUCT_NAME}, not by a model)`,
     JSON.stringify(
       {
         signature: facts.signature,
@@ -62,7 +63,7 @@ export function triagePrompt(args: {
   return parts.join('\n');
 }
 
-export const VERDICT_SYSTEM = `You are the evidence-weighing stage of Alibi, a CI failure forensics system.
+export const VERDICT_SYSTEM = `You are the evidence-weighing stage of ${PRODUCT_NAME}, an evidence-driven CI investigation system.
 You receive competing hypotheses and an evidence ledger of executed experiments with their actual results. Decide which hypotheses the evidence supports or refutes.
 
 Rules:
@@ -117,16 +118,16 @@ export function verdictPrompt(args: {
   ].join('\n');
 }
 
-export const PATCH_SYSTEM = `You are the remediation stage of Alibi, a CI failure forensics system.
+export const PATCH_SYSTEM = `You are the remediation stage of ${PRODUCT_NAME}, an evidence-driven CI investigation system.
 Write the smallest change that fixes the confirmed root cause. You will be given the failing test output, the commit diff that introduced the failure, and the current contents of relevant files.
 
 Rules:
-- Return the COMPLETE new content of each file you change (at most 3 files). Do not change tests to make them pass unless the test itself is wrong, and say so if it is.
+- Return the COMPLETE new content of each file you change (at most 3 files). Test files are read-only: they are shown for context, and any edit to them is rejected. Fix the code under test.
 - Do not modify CI configuration, build scripts, or files under .github/.
 - Keep unrelated code unchanged, including formatting.
 - Output a single JSON object matching the schema.`;
 
-export function patchPrompt(args: { signature: string; failureOutput: string; diff: string; files: Array<{ path: string; content: string }>; rootCause: string }): string {
+export function patchPrompt(args: { signature: string; failureOutput: string; diff: string; files: Array<{ path: string; content: string; readOnly?: boolean }>; rootCause: string }): string {
   return [
     `## Root cause (from evidence)`,
     args.rootCause,
@@ -141,18 +142,18 @@ export function patchPrompt(args: { signature: string; failureOutput: string; di
     args.diff.slice(0, 12_000),
     '```',
     `## Current file contents at the failing commit`,
-    ...args.files.map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``),
+    ...args.files.map((f) => `### ${f.path}${f.readOnly ? ' (read-only test file: context only)' : ''}\n\`\`\`\n${f.content}\n\`\`\``),
   ].join('\n');
 }
 
 // ---------------------------------------------------------------------------
 // Bounded agent loop
 
-export const LOOP_SYSTEM = `You are the experiment-selection stage of Alibi, a CI failure forensics system.
+export const LOOP_SYSTEM = `You are the experiment-selection stage of ${PRODUCT_NAME}, an evidence-driven CI investigation system.
 You see competing hypotheses and the ACTUAL results of experiments already executed in an isolated sandbox. Choose the single next experiment that best discriminates between the remaining hypotheses, or conclude.
 
 Rules:
-- Use only the tools and argument values listed in "Allowed actions". You cannot run commands, choose file paths, or change code. Anything else is rejected by policy.
+- Use only the tools, argument names, and argument values listed in "Allowed actions". You cannot run commands, choose file paths, set environment variables, or change code. Any other argument, including unknown ones, makes the whole action be rejected by policy.
 - State a concrete, falsifiable prediction for the experiment (what result each leading hypothesis predicts).
 - Revise hypotheses based on the observed results: strengthened, weakened, refuted, or unchanged, each with a reason that cites an observation.
 - Do not repeat an experiment that has already run with the same arguments.

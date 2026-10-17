@@ -1,6 +1,6 @@
 # Demo scenarios
 
-Three deterministic scenarios exercise the three main failure classes. Each one is a real git repository built from commit overlays in `commits/` with fixed authors and dates, so commit SHAs are identical on every machine. Each also has a **CI log fixture** (`ci-log.txt`) captured by actually running the CI command on the failing commit in the Alibi sandbox and wrapping the output in GitHub Actions log format.
+Three deterministic scenarios exercise the three main failure classes. Each one is a real git repository built from commit overlays in `commits/` with fixed authors and dates, so commit SHAs are identical on every machine. Each also has a **CI log fixture** (`ci-log.txt`) captured by actually running the CI command on the failing commit in the Zerqis sandbox and wrapping the output in GitHub Actions log format.
 
 ```bash
 npm run demo:build            # builds data/demo-repos/<id> (idempotent; --force rebuilds)

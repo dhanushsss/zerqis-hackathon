@@ -6,8 +6,7 @@ function Row({ e, b }: { e: Experiment; b: Bundle }) {
   const inv = b.investigation;
   const commitLabel = e.commitSha === inv.parentSha ? 'parent' : e.commitSha === inv.commitSha ? (e.patchId ? 'failing + patch' : 'failing') : '';
   return (
-    <li className="exp-item">
-      <ExpStatus exp={e} />
+    <li className={`exp-item s-${e.status}`}>
       <div style={{ minWidth: 0 }}>
         <div className="row-wrap" style={{ gap: 8 }}>
           <Link to={`/investigations/${inv.id}/experiments/${e.id}`} className="title">
@@ -24,10 +23,20 @@ function Row({ e, b }: { e: Experiment; b: Bundle }) {
         <p className="obs">{e.observation ?? e.reason}</p>
         {e.effect && e.status !== 'skipped' && e.status !== 'queued' && <p className="eff">{e.effect}</p>}
       </div>
+      {/* Outcome first: the result label, the run sequence, then counts and duration. */}
       <div className="exp-side">
+        <ExpStatus exp={e} withLabel />
         {e.backend === 'docker' && e.plannedAttempts > 0 && <AttemptStrip exp={e} />}
         <span className="xs faint nowrap">
-          {e.status === 'running' ? `run ${(e.result?.attempts.length ?? 0) + 1} of ${e.plannedAttempts}` : e.status === 'queued' ? 'queued' : e.status === 'skipped' ? 'skipped' : duration(e.durationMs)}
+          {e.status === 'running'
+            ? `run ${(e.result?.attempts.length ?? 0) + 1} of ${e.plannedAttempts}`
+            : e.status === 'queued'
+              ? 'queued'
+              : e.status === 'skipped'
+                ? 'not executed'
+                : e.result
+                  ? `${e.result.failures}/${e.result.attempts.length} failed · ${duration(e.durationMs)}`
+                  : duration(e.durationMs)}
         </span>
       </div>
     </li>

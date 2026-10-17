@@ -57,6 +57,16 @@ export function stages(b: Bundle): Stage[] {
       meta: b.patches.length ? `${validated}/${b.patches.length} ${b.patches.length === 1 ? 'fix' : 'fixes'} validated` : inv.remediationType === 'retry' ? 'Retry advised' : !running && inv.verdict ? 'No fix justified' : 'After the verdict',
     },
   ];
+  // A change verification that ended without a diagnosis (blocked, or no failing test) skips the later steps.
+  const c = inv.change;
+  if (c?.outcome && !inv.verdict && !running) {
+    const why = c.outcome === 'blocked' ? 'Blocked: required runs could not happen' : 'Not needed: no test failed';
+    for (const k of ['hypotheses', 'verdict', 'remediation']) {
+      const i = out.findIndex((s) => s.key === k);
+      out[i] = { ...out[i], state: 'skipped', meta: why };
+    }
+    out[0] = { ...out[0], state: 'done', meta: c.examined.length ? `Full suite at ${c.examined.length} ${c.examined.length === 1 ? 'revision' : 'revisions'}` : 'Revisions checked' };
+  }
   if (inv.status === 'failed') {
     const i = out.findIndex((s) => s.state !== 'done');
     if (i >= 0) {

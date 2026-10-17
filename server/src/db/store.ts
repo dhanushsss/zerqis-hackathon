@@ -106,8 +106,16 @@ export class Store {
     return rows.map((r) => JSON.parse(r.data) as Investigation);
   }
 
+  /**
+   * Deletes an investigation and everything recorded for it in one transaction. Child tables
+   * cascade by foreign key; model_calls has no foreign key (connection tests have no
+   * investigation), so its rows are deleted explicitly.
+   */
   deleteInvestigation(id: string): boolean {
-    return this.db.prepare('DELETE FROM investigations WHERE id = ?').run(id).changes > 0;
+    return this.db.transaction(() => {
+      this.db.prepare('DELETE FROM model_calls WHERE investigation_id = ?').run(id);
+      return this.db.prepare('DELETE FROM investigations WHERE id = ?').run(id).changes > 0;
+    })();
   }
 
   /** Marks investigations that were mid-flight when the process stopped. */

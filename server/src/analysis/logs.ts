@@ -1,4 +1,6 @@
 import type { Framework, LogStats } from '../domain/types.js';
+import { GO_COMPILE_LINE } from '../runner/golang.js';
+import { TSC_LINE } from '../runner/typescript.js';
 
 export interface LogExcerpt {
   startLine: number;
@@ -25,6 +27,12 @@ export interface LogFacts {
   failingTests: FailingTest[];
   failingFiles: string[];
   compileErrors: CompileError[];
+  /** Which tool reported the compile errors, when any were found. */
+  compileTool: 'javac' | 'tsc' | 'go' | null;
+  /** TypeScript: the log invoked tsc with tsconfig.build.json (a build, not only a type check). */
+  tsBuild: boolean;
+  /** Go: the compile errors came from `go test` (a package's tests did not build), not only `go build`. */
+  goTestBuildFailed: boolean;
   assertion: string | null;
   jestSeed: number | null;
   exitCode: number | null;
@@ -48,8 +56,14 @@ export function splitLines(log: string): string[] {
 const ANCHORS: Array<[RegExp, string, number]> = [
   [/##\[error\]/, 'GitHub Actions error', 5],
   [/\bCOMPILATION ERROR\b|cannot find symbol|error: /, 'compiler error', 5],
+  [/^\S+\.tsx?\(\d+,\d+\): error TS\d+|^\S+\.tsx?:\d+:\d+ - error TS\d+/, 'TypeScript compiler error', 5],
+  [/^\s*--- FAIL: Test/, 'Go test failure', 5],
+  [/^(?:\.\/)?\S+\.go:\d+:\d+: |\[build failed\]|^# \S+$/, 'Go compiler error', 5],
   [/^\s*●\s/, 'Jest failure', 5],
   [/^FAIL\s+\S+/, 'Jest failing file', 4],
+  [/^(FAILED|ERROR)\s+[^\s:]+\.py\b/, 'pytest failure', 5],
+  [/^E\s{2,}\S/, 'pytest assertion', 3],
+  [/^=+ short test summary info =+$|^=+ .*\b(failed|errors?)\b.* in [\d.]+s/, 'pytest summary', 3],
   [/BUILD FAILURE|<<< FAILURE!|Tests run:.*Failures: [1-9]/, 'Maven failure', 4],
   [/\bExpected\b|\bReceived\b|AssertionError|expected:<|but was:</, 'assertion', 3],
   [/^\s*at\s+\S+.*\(.*:\d+:\d+\)|^\s*at\s+[\w.$]+\(/, 'stack frame', 1],
@@ -132,7 +146,17 @@ export function extractFacts(log: string, frameworkHint: Framework = 'unknown'):
   let testSummary: string | null = null;
   let sawJest = false;
   let sawMaven = false;
+  let sawPytest = false;
+  let sawGo = false;
+  let goTestBuildFailed = false;
+  let goBuildHeader = false;
+  let compileTool: LogFacts['compileTool'] = null;
+  let tsBuild = false;
   let currentFile: string | undefined;
+  const addCompile = (ce: CompileError, tool: NonNullable<LogFacts['compileTool']>) => {
+    compileTool ??= tool;
+    if (!compileErrors.some((c) => c.file === ce.file && c.line === ce.line && c.message === ce.message)) compileErrors.push(ce);
+  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -157,7 +181,7 @@ export function extractFacts(log: string, frameworkHint: Framework = 'unknown'):
       const loc = /^(?:\[ERROR\])?\s+location:\s+(.+)$/.exec(lines[i + 2] ?? '');
       if (sym) ce.symbol = sym[1].trim();
       if (loc) ce.location = loc[1].trim();
-      if (!compileErrors.some((c) => c.file === ce.file && c.line === ce.line && c.message === ce.message)) compileErrors.push(ce);
+      addCompile(ce, 'javac');
     } else if ((m = /^\[ERROR\]\s+([A-Z][\w$]*Test[\w$]*)\.(\w+):(\d+)\s+(.*)$/.exec(line))) {
       sawMaven = true;
       const name = `${m[1]}#${m[2]}`;
@@ -170,12 +194,51 @@ export function extractFacts(log: string, frameworkHint: Framework = 'unknown'):
       sawMaven = true;
       const d = { group: m[1].replace(/\//g, '.'), artifact: m[2], version: m[3] };
       if (!downloads.some((x) => x.group === d.group && x.artifact === d.artifact && x.version === d.version)) downloads.push(d);
+    } else if ((m = /^(FAILED|ERROR)\s+([^\s:]+\.py)(?:::(.+?))?(?:\s+-\s+(.*))?\s*$/.exec(line))) {
+      // pytest short test summary: "FAILED tests/test_a.py::TestK::test_p[2] - assert 2 == 1".
+      sawPytest = true;
+      if (!failingFiles.includes(m[2])) failingFiles.push(m[2]);
+      if (m[3] && !failingTests.some((t) => t.name === m![3] && t.file === m![2])) failingTests.push({ name: m[3], file: m[2] });
+      if (m[4]) assertion ??= m[4].trim();
+    } else if (/^=+ test session starts =+$/.test(line)) {
+      sawPytest = true;
+    } else if (sawPytest && (m = /^=*\s*(\d+ (?:failed|passed|errors?|skipped)\b.*? in [\d.]+s\b.*?)\s*=*$/.exec(line))) {
+      testSummary = m[1].trim();
+    } else if ((m = TSC_LINE.exec(line))) {
+      // Top-level tsc output only; ts-jest diagnostics are indented inside a Jest suite failure.
+      addCompile({ file: m[1], line: Number(m[2] ?? m[4]), message: `${m[6]}: ${m[7].trim()}` }, 'tsc');
+    } else if ((m = /^\s*--- FAIL: (Test[A-Za-z0-9_]*(?:\/\S+)?) \([\d.]+s\)/.exec(line))) {
+      sawGo = true;
+      const name = m[1];
+      if (!failingTests.some((t) => t.name === name)) failingTests.push({ name });
+      // First indented diagnostic below the failure, e.g. "    rates_test.go:12: got 899, want 499".
+      const detail = /^\s+(\S+_test\.go:\d+: .+)$/.exec(lines[i + 1] ?? '');
+      if (detail) assertion ??= detail[1].trim();
+    } else if ((m = /^FAIL\s+(\S+)\s+\[(build|setup) failed\]/.exec(line))) {
+      sawGo = true;
+      goTestBuildFailed = true;
+    } else if (/^(ok|FAIL|\?)\s+[A-Za-z0-9][\w.~\/-]*\s+(\(cached\)|[\d.]+s|\[no test files\])/.test(line)) {
+      sawGo = true;
+    } else if (/^# [A-Za-z0-9][\w.~\/-]*( \[[\w.~\/-]+\.test\])?$/.test(line)) {
+      // "# example.com/pkg" introduces the compiler output for one package.
+      goBuildHeader = true;
+      sawGo = true;
+    } else if (goBuildHeader && (m = GO_COMPILE_LINE.exec(line)) && m[3]) {
+      addCompile({ file: m[1], line: Number(m[2]), message: m[4].trim() }, 'go');
     } else if ((m = /Process completed with exit code (\d+)/.exec(line))) {
       exitCode = Number(m[1]);
     } else if (/BUILD FAILURE|\[INFO\] Scanning for projects/.test(line)) {
       sawMaven = true;
     }
+    if (/\btsc\b.*\btsconfig\.build\.json\b/.test(line)) tsBuild = true;
+    if (goBuildHeader && !line.trim()) goBuildHeader = false;
 
+    if (!assertion && sawPytest && /^E\s{2,}\S/.test(line)) {
+      // First pytest "E" block (assertion or exception), up to three lines.
+      const block: string[] = [];
+      for (let j = i; j < lines.length && block.length < 3 && /^E\s/.test(lines[j]); j++) block.push(lines[j].slice(1).trim());
+      assertion = block.filter(Boolean).join(' | ');
+    }
     if (!assertion && sawJest && /^\s*(Expected|Received|expect\()/.test(line)) {
       assertion = lines.slice(i, i + 4).map((l) => l.trim()).filter(Boolean).join(' | ');
     }
@@ -184,7 +247,7 @@ export function extractFacts(log: string, frameworkHint: Framework = 'unknown'):
   // Mocha: "N failing" followed by numbered failures, e.g. "1) suite\n  nested\n    test name:".
   let sawMocha = false;
   const failingAt = lines.findIndex((l) => /^\s*\d+ failing\s*$/.test(l));
-  if (failingAt >= 0 && !sawJest && !sawMaven) {
+  if (failingAt >= 0 && !sawJest && !sawMaven && !sawPytest) {
     sawMocha = true;
     testSummary ??= lines.slice(Math.max(0, failingAt - 3), failingAt + 1).map((l) => l.trim()).filter(Boolean).join(', ');
     for (let i = failingAt + 1; i < lines.length && failingTests.length < 20; i++) {
@@ -206,18 +269,24 @@ export function extractFacts(log: string, frameworkHint: Framework = 'unknown'):
     }
   }
 
-  const framework: Framework = frameworkHint !== 'unknown' ? frameworkHint : sawMaven ? 'maven' : sawJest ? 'jest' : sawMocha ? 'mocha' : 'unknown';
+  const framework: Framework = frameworkHint !== 'unknown' ? frameworkHint : sawMaven ? 'maven' : sawJest ? 'jest' : sawPytest ? 'pytest' : sawGo ? 'go' : sawMocha ? 'mocha' : 'unknown';
+  // Go: a parent test is reported failed whenever a subtest fails; keep the most specific names.
+  const tests = framework === 'go' ? failingTests.filter((t) => !failingTests.some((o) => o.name.startsWith(`${t.name}/`))) : failingTests;
+  if (compileErrors.some((c) => c.file.endsWith('_test.go'))) goTestBuildFailed = true;
   return {
     framework,
-    failingTests,
+    failingTests: tests,
     failingFiles,
     compileErrors,
+    compileTool,
+    tsBuild,
+    goTestBuildFailed,
     assertion,
     jestSeed,
     exitCode,
     testSummary,
     downloads,
-    signature: buildSignature(framework, failingTests, compileErrors, failingFiles, assertion),
+    signature: buildSignature(framework, tests, compileErrors, failingFiles, assertion),
   };
 }
 

@@ -1,6 +1,8 @@
 import { config } from '../config.js';
+import { looksLikePytest, REQUIREMENT_FILES } from '../runner/python.js';
 import type { Store } from '../db/store.js';
-import type { Framework, Investigation } from '../domain/types.js';
+import type { ChangeVerification, Framework, Investigation } from '../domain/types.js';
+import { parseRepoUrl, REVISION } from './change.js';
 import { GitHubClient, GitHubError, type RunRef } from '../integrations/github.js';
 import { buildDemoRepo } from '../scenarios/build.js';
 import { getScenario } from '../scenarios/registry.js';
@@ -75,6 +77,14 @@ async function detectFrameworkRemote(gh: GitHubClient, ref: RunRef, sha: string)
       // fall through
     }
   }
+  if (await exists('go.mod')) return 'go';
+  // Python: read only the few root files pytest detection looks at.
+  const files = new Map<string, string>();
+  for (const path of ['pytest.ini', 'conftest.py', 'pyproject.toml', 'setup.cfg', 'tox.ini', ...REQUIREMENT_FILES]) {
+    const f = await exists(path);
+    if (typeof f?.content === 'string') files.set(path, Buffer.from(f.content, 'base64').toString('utf8'));
+  }
+  if (looksLikePytest((p) => files.get(p) ?? null)) return 'pytest';
   return 'unknown';
 }
 
@@ -143,4 +153,100 @@ export async function startFromGitHubRun(
   store.upsertRepository(inv.repository, { url: inv.repoUrl, lastRunId: ref.runId });
   queue.enqueue(inv.id);
   return { investigation: inv, duplicate: false };
+}
+
+export interface ChangeRequest {
+  /** Verify the change examined by an existing investigation (its parent → its commit). */
+  investigationId?: string;
+  /** A sample (fixture) repository built by Alibi. */
+  scenarioId?: string;
+  /** A public GitHub repository, https://github.com/owner/repo. */
+  repoUrl?: string;
+  base?: string;
+  head?: string;
+}
+
+/**
+ * Starts a change verification for a base/head revision pair. Revisions are validated here
+ * (hex only); whether they exist is checked during the run, where a missing revision ends
+ * the verification as "blocked" rather than failing.
+ */
+export async function startChange(store: Store, queue: InvestigationQueue, req: ChangeRequest, opts: StartOptions = {}): Promise<Investigation> {
+  const origins = [req.investigationId, req.scenarioId, req.repoUrl].filter((x) => x !== undefined && x !== '');
+  if (origins.length !== 1) throw new IntakeError('Provide exactly one of investigationId, scenarioId, or repoUrl.');
+  let origin: ChangeVerification['origin'];
+  let repository: string;
+  let base = req.base?.trim().toLowerCase();
+  let head = req.head?.trim().toLowerCase();
+  let fromInvestigationId: string | null = null;
+
+  if (req.investigationId) {
+    const src = store.getInvestigation(req.investigationId);
+    if (!src) throw new IntakeError('Investigation not found', 404);
+    if (src.change) {
+      origin = src.change.origin;
+      base ??= src.change.baseSha ?? src.change.requested.base;
+      head ??= src.change.headSha ?? src.change.requested.head;
+    } else if (src.source === 'demo' && src.scenarioId) {
+      origin = { kind: 'sample', scenarioId: src.scenarioId };
+    } else {
+      origin = { kind: 'github', url: `https://github.com/${src.repository}` };
+    }
+    if (!src.change) {
+      if (!src.parentSha) throw new IntakeError('That investigation has no known parent commit, so there is no base revision to compare against.', 409);
+      base ??= src.parentSha;
+      head ??= src.commitSha;
+    }
+    repository = src.repository;
+    fromInvestigationId = src.id;
+  } else if (req.scenarioId) {
+    const scenario = getScenario(req.scenarioId);
+    if (!scenario) throw new IntakeError(`Unknown sample repository "${req.scenarioId}"`, 404);
+    await buildDemoRepo(scenario.id);
+    origin = { kind: 'sample', scenarioId: scenario.id };
+    repository = scenario.repository;
+  } else {
+    const ref = parseRepoUrl(req.repoUrl!);
+    if (!ref) throw new IntakeError('Expected a public GitHub repository URL like https://github.com/owner/repo');
+    origin = { kind: 'github', url: ref.url };
+    repository = `${ref.owner}/${ref.repo}`;
+  }
+  if (!base || !head) throw new IntakeError('Both a base and a head revision are required.');
+  for (const [name, rev] of [['base', base], ['head', head]] as const) {
+    if (!REVISION.test(rev)) throw new IntakeError(`The ${name} revision must be a commit SHA (7–40 hexadecimal characters); branch names and other refs are not accepted.`);
+  }
+  if (base === head) throw new IntakeError('The base and head revisions are the same.');
+
+  const inv = freshInvestigation({
+    source: 'change',
+    repository,
+    repoUrl: origin.kind === 'github' ? origin.url : null,
+    commitSha: head,
+    parentSha: base,
+    framework: 'unknown',
+    options: options(store, opts),
+    change: {
+      origin,
+      fromInvestigationId,
+      requested: { base, head },
+      baseSha: null,
+      headSha: null,
+      outcome: null,
+      outcomeDetail: null,
+      fix: null,
+      examined: [],
+      notTested: [],
+    },
+  });
+  store.createInvestigation(inv);
+  queue.enqueue(inv.id);
+  return inv;
+}
+
+/** Commits of a sample repository, oldest first, for choosing a revision pair. */
+export async function sampleRevisions(scenarioId: string): Promise<Array<{ sha: string; message: string }>> {
+  const scenario = getScenario(scenarioId);
+  if (!scenario) throw new IntakeError(`Unknown sample repository "${scenarioId}"`, 404);
+  const repo = await buildDemoRepo(scenario.id);
+  return repo.commits.map((c) => ({ sha: c.sha, message: c.message }));
 }

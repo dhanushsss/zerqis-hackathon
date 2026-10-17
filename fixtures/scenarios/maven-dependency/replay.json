@@ -1,0 +1,164 @@
+{
+  "scenarioId": "maven-dependency",
+  "recordedAt": "2026-10-16T03:59:00.066Z",
+  "investigationId": "inv_mvafugsd9090b5d1",
+  "baseUrl": "https://api.tokenfactory.nebius.com/v1",
+  "steps": {
+    "triage": {
+      "model": "nvidia/Nemotron-3_5-Lightning",
+      "output": {
+        "summary": "Guava 21.0 removed the deprecated Objects.toStringHelper method, causing a compilation failure in InventoryItem.java line 50.",
+        "failure_signature": "Compilation error at InventoryItem.java:50 — cannot find symbol method toStringHelper(com.example.inventory.InventoryItem) in class com.google.common.base.Objects",
+        "failing_tests": [],
+        "environment_clues": [],
+        "implicated_dependencies": [],
+        "hypotheses": [
+          {
+            "id": "H1",
+            "cause": "Guava 21.0 removed deprecated toStringHelper method",
+            "category": "dependency_regression",
+            "supporting_evidence": [
+              {
+                "quote": "[ERROR] /work/src/main/java/com/example/inventory/InventoryItem.java:[50,23] cannot find symbol\n  symbol:   method toStringHelper(com.example.inventory.InventoryItem)\n  location: class com.google.common.base.Objects",
+                "line": 251
+              },
+              {
+                "quote": "dependency changes: [{\"ecosystem\":\"maven\",\"name\":\"guava\",\"from\":\"20.0\",\"to\":\"21.0\",\"file\":\"pom.xml\",\"removedLine\":\"    <guava.version>20.0</guava.version>\",\"addedLine\":\"    <guava.version>21.0</guava.version>\"}]",
+                "line": 1
+              },
+              {
+                "quote": "commit message: build(deps): bump com.google.guava:guava from 20.0 to 21.0",
+                "line": 1
+              }
+            ],
+            "contradicting_evidence": [],
+            "prior": "high",
+            "experiments": [
+              "compare_parent",
+              "reproduce"
+            ],
+            "next_experiment": "compare_parent"
+          },
+          {
+            "id": "H2",
+            "cause": "InventoryItem.java source code references removed API that was previously tolerated or compiled via transitive dependency shading",
+            "category": "code_regression",
+            "supporting_evidence": [
+              {
+                "quote": "[ERROR] /work/src/main/java/com/example/inventory/InventoryItem.java:[50,23] cannot find symbol\n  symbol:   method toStringHelper(com.example.inventory.InventoryItem)\n  location: class com.google.common.base.Objects",
+                "line": 251
+              }
+            ],
+            "contradicting_evidence": [
+              {
+                "quote": "commit message: build(deps): bump com.google.guava:guava from 20.0 to 21.0",
+                "line": 1
+              }
+            ],
+            "prior": "medium",
+            "experiments": [
+              "reproduce",
+              "compare_parent"
+            ],
+            "next_experiment": "compare_parent"
+          },
+          {
+            "id": "H3",
+            "cause": "Maven compiler plugin configuration or Java 17 compatibility issue masking the real problem",
+            "category": "infrastructure",
+            "supporting_evidence": [
+              {
+                "quote": "[INFO] Compiling 2 source files with javac [debug release 17] to target/classes",
+                "line": 249
+              },
+              {
+                "quote": "[ERROR] -> [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException",
+                "line": 260
+              }
+            ],
+            "contradicting_evidence": [],
+            "prior": "low",
+            "experiments": [
+              "compare_parent",
+              "reproduce"
+            ],
+            "next_experiment": "compare_parent"
+          },
+          {
+            "id": "H4",
+            "cause": "Transitive dependency conflict where another library pulls in Guava 21.0 and overrides the explicit 20.0 version, causing API mismatch",
+            "category": "dependency_regression",
+            "supporting_evidence": [],
+            "contradicting_evidence": [
+              {
+                "quote": "resolvedArtifacts includes {group: \"com.google.guava\", artifact: \"guava\", version: \"21.0\"}",
+                "line": 1
+              }
+            ],
+            "prior": "low",
+            "experiments": [
+              "external_search"
+            ],
+            "next_experiment": "external_search"
+          }
+        ],
+        "search_queries": [
+          "Guava 21.0 removed Objects.toStringHelper",
+          "Maven guava 21.0 compilation error toStringHelper deprecated",
+          "InventoryItem toStringHelper com.example.inventory.InventoryItem Guava upgrade failure"
+        ]
+      },
+      "recordedAt": "2026-10-16T03:59:03.861Z"
+    },
+    "verdict": {
+      "model": "nvidia/nemotron-3-super-120b-a12b",
+      "output": {
+        "classification": "dependency_regression",
+        "verdict": "confirmed",
+        "summary": "The upgrade to Guava 21.0 removed the deprecated toStringHelper method from com.google.common.base.Objects, causing a compilation failure in InventoryItem.java. The parent commit builds successfully, confirming the regression is due to the dependency change.",
+        "primary_hypothesis": "H1",
+        "hypotheses": [
+          {
+            "id": "H1",
+            "status": "supported",
+            "assessment": "Supported by reproduction failure at the upgraded commit and success at the parent commit, forming a discriminating experiment."
+          },
+          {
+            "id": "H2",
+            "status": "refuted",
+            "assessment": "Contradicted by the parent commit passing despite identical source code, proving the source alone is not the cause."
+          },
+          {
+            "id": "H3",
+            "status": "inconclusive",
+            "assessment": "No evidence of compiler misconfiguration; the error is a clear symbol absence consistent with API removal."
+          },
+          {
+            "id": "H4",
+            "status": "refuted",
+            "assessment": "Contradicted by resolved artifacts showing Guava 21.0 is correctly resolved, ruling out a version override conflict."
+          }
+        ],
+        "recommended_action": "Replace com.google.common.base.Objects.toStringHelper(...) with com.google.common.base.MoreObjects.toStringHelper(...) in InventoryItem.java.",
+        "remediation_type": "code_patch",
+        "limitations": [
+          "The fix assumes the source change is isolated; other uses of removed Guava 21.0 APIs may exist but were not observed in this build."
+        ]
+      },
+      "recordedAt": "2026-10-16T03:59:23.883Z"
+    },
+    "patch": {
+      "model": "nvidia/Nemotron-3-Ultra-550b-a55b",
+      "output": {
+        "explanation": "The compilation error occurs because Guava 21.0 removed the deprecated `Objects.toStringHelper()` method that was used in InventoryItem.java. The fix is to replace the Guava-based toString implementation with a standard Java implementation using StringBuilder or String.format, which eliminates the dependency on the removed method.",
+        "files": [
+          {
+            "path": "src/main/java/com/example/inventory/InventoryItem.java",
+            "content": "package com.example.inventory;\n\nimport com.google.common.base.Preconditions;\n\n/** A stock-keeping unit tracked by the inventory service. */\npublic final class InventoryItem {\n    private final String sku;\n    private final String name;\n    private final int quantity;\n\n    public InventoryItem(String sku, String name, int quantity) {\n        this.sku = Preconditions.checkNotNull(sku, \"sku\");\n        this.name = Preconditions.checkNotNull(name, \"name\");\n        Preconditions.checkArgument(quantity >= 0, \"quantity must be non-negative: %s\", quantity);\n        this.quantity = quantity;\n    }\n\n    public String sku() {\n        return sku;\n    }\n\n    public String name() {\n        return name;\n    }\n\n    public int quantity() {\n        return quantity;\n    }\n\n    public InventoryItem withQuantity(int newQuantity) {\n        return new InventoryItem(sku, name, newQuantity);\n    }\n\n    @Override\n    public boolean equals(Object other) {\n        if (this == other) return true;\n        if (!(other instanceof InventoryItem)) return false;\n        InventoryItem that = (InventoryItem) other;\n        return quantity == that.quantity && sku.equals(that.sku) && name.equals(that.name);\n    }\n\n    @Override\n    public int hashCode() {\n        return java.util.Objects.hash(sku, name, quantity);\n    }\n\n    @Override\n    public String toString() {\n        return \"InventoryItem{\" +\n                \"sku='\" + sku + '\\'' +\n                \", name='\" + name + '\\'' +\n                \", quantity=\" + quantity +\n                '}';\n    }\n}"
+          }
+        ]
+      },
+      "recordedAt": "2026-10-16T03:59:25.590Z"
+    }
+  }
+}

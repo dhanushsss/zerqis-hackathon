@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { freshInvestigation } from '../pipeline/investigate.js';
-import { openDatabase } from './database.js';
+import { migrate, openDatabase } from './database.js';
 import { Store } from './store.js';
 
 const mk = () => new Store(openDatabase(':memory:'));
@@ -20,6 +20,29 @@ describe('persistence', () => {
     expect(b.evidence.map((e) => e.title)).toEqual(['a', 'b']);
     expect(s.deleteInvestigation(inv.id)).toBe(true);
     expect(s.listEvidence(inv.id)).toEqual([]);
+  });
+
+  it('regression (QA D12 probe): deleting an investigation also deletes its model calls, and only its own', () => {
+    const s = mk();
+    const a = s.createInvestigation(freshInvestigation({ source: 'demo', repository: 'acme/a', commitSha: 'abc1234' }));
+    const b = s.createInvestigation(freshInvestigation({ source: 'demo', repository: 'acme/b', commitSha: 'abc1235' }));
+    const call = (id: string, investigationId: string | null) =>
+      s.addModelCall({ id, investigationId, step: 'triage', role: 'triage', model: 'm', status: 'ok', startedAt: new Date().toISOString(), durationMs: 1, inputChars: 1, promptTokens: 1, completionTokens: 1, attempts: 1, error: null });
+    call('mc_a', a.id);
+    call('mc_b', b.id);
+    call('mc_test', null);
+    expect(s.deleteInvestigation(a.id)).toBe(true);
+    expect(s.listModelCalls(a.id)).toEqual([]);
+    expect(s.listModelCalls(b.id).map((c) => c.id)).toEqual(['mc_b']);
+    expect(s.listModelCalls().map((c) => c.id).sort()).toEqual(['mc_b', 'mc_test']);
+  });
+
+  it('the orphan-cleanup migration removes model calls of investigations deleted earlier', () => {
+    const db = openDatabase(':memory:');
+    db.pragma('user_version = 1');
+    db.prepare("INSERT INTO model_calls (id, investigation_id, started_at, data) VALUES ('mc_orphan', 'inv_gone', '2026-01-01', '{}'), ('mc_conn', NULL, '2026-01-01', '{}')").run();
+    migrate(db);
+    expect(db.prepare('SELECT id FROM model_calls ORDER BY id').all()).toEqual([{ id: 'mc_conn' }]);
   });
 
   it('filters and searches investigations', () => {

@@ -1,5 +1,7 @@
 # Verification report
 
+> **Naming note (2026-10-17):** the product is now called **Zerqis**. This is a historical record written when it was named Alibi; names, commands, and identifiers below are left as they were.
+
 > **Update 2026-10-16:** the two "NOT VERIFIED" rows below (live Nemotron and Tavily) predate the API keys. Both were later verified live; see [verification/live-cloud-verification.md](verification/live-cloud-verification.md).
 
 Date: 2026-10-16 · Host: macOS (Darwin 27), Node 20.19.6, Docker Engine 29.5.3 (Rancher Desktop), OpenJDK 17, Maven 3.9.12.

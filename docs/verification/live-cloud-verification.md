@@ -1,5 +1,7 @@
 # Live cloud verification
 
+> **Naming note (2026-10-17):** the product is now called **Zerqis**. This is a historical record written when it was named Alibi; names, commands, and identifiers below are left as they were.
+
 **Date:** 2026-10-16 · **Host:** macOS (Darwin 27), Node 20.19.6, Docker Engine 29.5.3 (Rancher Desktop), Maven 3.9 / Temurin 17 images
 **Scope:** verify the existing Alibi implementation against live Nebius Token Factory and Tavily, and run the three benchmark scenarios. Only approved fixes were made (two, listed below).
 

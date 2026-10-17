@@ -1,19 +1,25 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { api } from './api';
+import { BRAND } from './brand';
 import { readiness } from './readiness';
 import { RunSampleModal } from './components/RunSample';
-import { Icon, ToastProvider } from './components/ui';
+import { Icon, ToastProvider, Wordmark } from './components/ui';
 import { useApi } from './hooks';
+import { Docs } from './pages/Docs';
 import { ExperimentDetail } from './pages/ExperimentDetail';
 import { Integrations } from './pages/Integrations';
 import { InvestigationDetail } from './pages/InvestigationDetail';
 import { Investigations } from './pages/Investigations';
+import { Landing } from './pages/Landing';
 import { Overview } from './pages/Overview';
 import { SettingsPage } from './pages/Settings';
+import { VerifyPage } from './pages/Verify';
 
 const SECTION: Record<string, string> = {
+  overview: 'Overview',
   investigations: 'Investigations',
+  verify: 'Verify a change',
   integrations: 'Integrations',
   settings: 'Settings',
   ledger: 'Evidence ledger',
@@ -26,7 +32,6 @@ const SECTION: Record<string, string> = {
 function Crumbs() {
   const { pathname } = useLocation();
   const parts = pathname.split('/').filter(Boolean);
-  if (!parts.length) return <div className="crumbs"><span className="current">Overview</span></div>;
   return (
     <nav className="crumbs" aria-label="Breadcrumb">
       {parts.map((p, i) => {
@@ -61,12 +66,13 @@ function Readiness() {
           <span className="state">{r.state}</span>
         </Link>
       ))}
-      {data.publicDemo && <span className="xs" style={{ color: 'var(--ink-muted)', padding: '6px 10px' }}>Public demo · read-only</span>}
+      {data.publicDemo && <span className="xs demo-note">Public demo · read-only</span>}
     </div>
   );
 }
 
-export function App() {
+/** The application: sidebar navigation, top bar, and the product routes. */
+function AppShell() {
   const [sampleOpen, setSampleOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
@@ -80,29 +86,36 @@ export function App() {
   }, [navOpen]);
 
   return (
-    <ToastProvider>
+    <>
       <a className="skip-link" href="#main">
         Skip to content
       </a>
       <div className={`shell ${navOpen ? 'nav-open' : ''}`}>
         <aside className="sidebar" id="sidebar" aria-label="Sidebar">
-          <Link to="/" className="brand" aria-label="Alibi home">
-            <img src="/favicon.svg" alt="" />
-            <span className="brand-name">Alibi</span>
+          <Link to="/" className="brand" aria-label={`${BRAND.name} home`}>
+            <Wordmark size={26} />
           </Link>
-          <p className="brand-tag">CI failure forensics. Proves why builds fail.</p>
+          <p className="brand-tag">{BRAND.short}</p>
           <nav className="nav" aria-label="Main">
-            <NavLink to="/" end>
+            <NavLink to="/overview">
               <Icon name="overview" /> Overview
             </NavLink>
             <NavLink to="/investigations">
               <Icon name="list" /> Investigations
+            </NavLink>
+            <NavLink to="/verify">
+              <Icon name="shield" /> Verify a change
             </NavLink>
             <NavLink to="/integrations">
               <Icon name="plug" /> Integrations
             </NavLink>
             <NavLink to="/settings">
               <Icon name="settings" /> Settings
+            </NavLink>
+          </nav>
+          <nav className="nav nav-secondary" aria-label="Resources">
+            <NavLink to="/docs">
+              <Icon name="file" /> Documentation
             </NavLink>
           </nav>
           <Readiness />
@@ -113,13 +126,13 @@ export function App() {
             <button className="btn btn-ghost btn-icon menu-btn" onClick={() => setNavOpen((o) => !o)} aria-label="Open navigation" aria-expanded={navOpen} aria-controls="sidebar">
               <Icon name="menu" />
             </button>
-            <Link to="/" className="brand-mobile" aria-label="Alibi home">
-              <img src="/favicon.svg" alt="" /> Alibi
+            <Link to="/" className="brand-mobile" aria-label={`${BRAND.name} home`}>
+              <Wordmark size={22} />
             </Link>
             <Crumbs />
             <span className="spacer" />
             {/* The Overview has its own primary action; avoid two competing buttons there. */}
-            {location.pathname !== '/' && (
+            {location.pathname !== '/overview' && (
               <button className="btn" onClick={() => setSampleOpen(true)} aria-label="Run sample investigation">
                 <Icon name="play" /> <span className="topbar-cta-label">Run sample investigation</span>
               </button>
@@ -127,10 +140,11 @@ export function App() {
           </header>
           <main className="content" id="main" tabIndex={-1}>
             <Routes>
-              <Route path="/" element={<Overview onRunSample={() => setSampleOpen(true)} />} />
+              <Route path="/overview" element={<Overview onRunSample={() => setSampleOpen(true)} />} />
               <Route path="/investigations" element={<Investigations />} />
               <Route path="/investigations/:id/experiments/:expId" element={<ExperimentDetail />} />
               <Route path="/investigations/:id/*" element={<InvestigationDetail />} />
+              <Route path="/verify" element={<VerifyPage />} />
               <Route path="/integrations" element={<Integrations />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={<NotFound />} />
@@ -139,6 +153,19 @@ export function App() {
         </div>
       </div>
       {sampleOpen && <RunSampleModal onClose={() => setSampleOpen(false)} />}
+    </>
+  );
+}
+
+export function App() {
+  return (
+    <ToastProvider>
+      <Routes>
+        {/* Public pages: static, no API calls. */}
+        <Route path="/" element={<Landing />} />
+        <Route path="/docs" element={<Docs />} />
+        <Route path="*" element={<AppShell />} />
+      </Routes>
     </ToastProvider>
   );
 }
@@ -147,9 +174,9 @@ function NotFound() {
   return (
     <div className="card">
       <div className="empty">
-        <h3>Page not found</h3>
+        <h1 className="h-empty">Page not found</h1>
         <p>The page you requested doesn't exist.</p>
-        <Link to="/" className="btn">
+        <Link to="/overview" className="btn">
           Back to overview
         </Link>
       </div>
