@@ -1,0 +1,22 @@
+{
+  "id": "maven-dependency",
+  "title": "Guava upgrade breaks inventory-api build",
+  "summary": "A dependency bump from Guava 20.0 to 21.0 fails compilation.",
+  "repository": "alibi-demo/inventory-api",
+  "framework": "maven",
+  "branch": "main",
+  "workflow": "CI",
+  "job": "build (temurin 17)",
+  "ciCommand": ["mvn", "-B", "test"],
+  "commits": [
+    { "dir": "01-base", "message": "feat: inventory items and stock level queries", "author": "Aiko Tanaka <aiko@example.dev>", "date": "2026-10-08T10:00:00Z" },
+    { "dir": "02-bump-guava", "message": "build(deps): bump com.google.guava:guava from 20.0 to 21.0", "author": "dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>", "date": "2026-10-15T06:30:00Z" }
+  ],
+  "expected": {
+    "classification": "dependency_regression",
+    "failingTest": { "file": "src/main/java/com/example/inventory/InventoryItem.java", "name": "compilation" },
+    "experiments": ["reproduce", "compare_parent", "external_search", "validate_patch"],
+    "remediation": "dependency_pin",
+    "notes": "Guava 21.0 removed com.google.common.base.Objects.toStringHelper (verified against the published 20.0 and 21.0 jars). The parent commit compiles and passes."
+  }
+}

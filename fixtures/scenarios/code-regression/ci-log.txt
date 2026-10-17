@@ -1,0 +1,73 @@
+2026-10-15T16:43:35.0370000Z Current runner version: '2.329.0'
+2026-10-15T16:43:35.0740000Z Operating System
+2026-10-15T16:43:35.1110000Z   Ubuntu
+2026-10-15T16:43:35.1480000Z   24.04.3
+2026-10-15T16:43:35.1850000Z Runner Image
+2026-10-15T16:43:35.2220000Z   Image: ubuntu-24.04
+2026-10-15T16:43:35.2590000Z ##[group]Run actions/checkout@v4
+2026-10-15T16:43:35.2960000Z with:
+2026-10-15T16:43:35.3330000Z   repository: alibi-demo/pricing-engine
+2026-10-15T16:43:35.3700000Z   token: ***
+2026-10-15T16:43:35.4070000Z ##[endgroup]
+2026-10-15T16:43:35.4440000Z Syncing repository: alibi-demo/pricing-engine
+2026-10-15T16:43:35.4810000Z HEAD is now at bf95727 refactor: table-driven discount tiers and frozen tax rates
+2026-10-15T16:43:35.5180000Z ##[group]Run actions/setup-node@v4
+2026-10-15T16:43:35.5550000Z Set up Node.js 20
+2026-10-15T16:43:35.5920000Z ##[endgroup]
+2026-10-15T16:43:35.6290000Z ##[group]Run npm ci
+2026-10-15T16:43:35.6660000Z npm ci
+2026-10-15T16:43:35.7030000Z ##[endgroup]
+2026-10-15T16:43:35.7400000Z npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+2026-10-15T16:43:35.7770000Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-10-15T16:43:35.8140000Z 
+2026-10-15T16:43:35.8510000Z added 267 packages in 4s
+2026-10-15T16:43:35.8880000Z ##[group]Run npm test
+2026-10-15T16:43:35.9250000Z npm test
+2026-10-15T16:43:35.9620000Z ##[endgroup]
+2026-10-15T16:43:35.9990000Z 
+2026-10-15T16:43:36.0360000Z > pricing-engine@2.3.0 test
+2026-10-15T16:43:36.0730000Z > jest --ci
+2026-10-15T16:43:36.1100000Z 
+2026-10-15T16:43:36.1470000Z FAIL test/discounts.test.js
+2026-10-15T16:43:36.1840000Z   ● discountRate › applies 10% at exactly the $100.00 threshold
+2026-10-15T16:43:36.2210000Z 
+2026-10-15T16:43:36.2580000Z     expect(received).toBe(expected) // Object.is equality
+2026-10-15T16:43:36.2950000Z 
+2026-10-15T16:43:36.3320000Z     Expected: 0.1
+2026-10-15T16:43:36.3690000Z     Received: 0
+2026-10-15T16:43:36.4060000Z 
+2026-10-15T16:43:36.4430000Z     [0m [90m  8 |[39m
+2026-10-15T16:43:36.4800000Z      [90m  9 |[39m   test([32m'applies 10% at exactly the $100.00 threshold'[39m[33m,[39m () [33m=>[39m {
+2026-10-15T16:43:36.5170000Z     [31m[1m>[22m[39m[90m 10 |[39m     expect(discountRate([35m10000[39m))[33m.[39mtoBe([35m0.1[39m)[33m;[39m
+2026-10-15T16:43:36.5540000Z      [90m    |[39m                                 [31m[1m^[22m[39m
+2026-10-15T16:43:36.5910000Z      [90m 11 |[39m   })[33m;[39m
+2026-10-15T16:43:36.6280000Z      [90m 12 |[39m
+2026-10-15T16:43:36.6650000Z      [90m 13 |[39m   test([32m'applies 15% from $250'[39m[33m,[39m () [33m=>[39m {[0m
+2026-10-15T16:43:36.7020000Z 
+2026-10-15T16:43:36.7390000Z       at Object.toBe (test/discounts.test.js:10:33)
+2026-10-15T16:43:36.7760000Z 
+2026-10-15T16:43:36.8130000Z   ● discountRate › applies 15% from $250
+2026-10-15T16:43:36.8500000Z 
+2026-10-15T16:43:36.8870000Z     expect(received).toBe(expected) // Object.is equality
+2026-10-15T16:43:36.9240000Z 
+2026-10-15T16:43:36.9610000Z     Expected: 0.15
+2026-10-15T16:43:36.9980000Z     Received: 0.1
+2026-10-15T16:43:37.0350000Z 
+2026-10-15T16:43:37.0720000Z     [0m [90m 12 |[39m
+2026-10-15T16:43:37.1090000Z      [90m 13 |[39m   test([32m'applies 15% from $250'[39m[33m,[39m () [33m=>[39m {
+2026-10-15T16:43:37.1460000Z     [31m[1m>[22m[39m[90m 14 |[39m     expect(discountRate([35m25000[39m))[33m.[39mtoBe([35m0.15[39m)[33m;[39m
+2026-10-15T16:43:37.1830000Z      [90m    |[39m                                 [31m[1m^[22m[39m
+2026-10-15T16:43:37.2200000Z      [90m 15 |[39m   })[33m;[39m
+2026-10-15T16:43:37.2570000Z      [90m 16 |[39m
+2026-10-15T16:43:37.2940000Z      [90m 17 |[39m   test([32m'applies 20% from $500'[39m[33m,[39m () [33m=>[39m {[0m
+2026-10-15T16:43:37.3310000Z 
+2026-10-15T16:43:37.3680000Z       at Object.toBe (test/discounts.test.js:14:33)
+2026-10-15T16:43:37.4050000Z 
+2026-10-15T16:43:37.4420000Z PASS test/tax.test.js
+2026-10-15T16:43:37.4790000Z 
+2026-10-15T16:43:37.5160000Z Test Suites: 1 failed, 1 passed, 2 total
+2026-10-15T16:43:37.5530000Z Tests:       2 failed, 5 passed, 7 total
+2026-10-15T16:43:37.5900000Z Snapshots:   0 total
+2026-10-15T16:43:37.6270000Z Time:        0.554 s
+2026-10-15T16:43:37.6640000Z Ran all test suites.
+2026-10-15T16:43:37.7010000Z ##[error]Process completed with exit code 1.

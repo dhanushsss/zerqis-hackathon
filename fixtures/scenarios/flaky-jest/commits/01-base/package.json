@@ -1,0 +1,12 @@
+{
+  "name": "checkout-service",
+  "version": "1.4.0",
+  "private": true,
+  "description": "Cart totals and outbound webhook delivery for the checkout flow.",
+  "scripts": {
+    "test": "jest --ci --showSeed"
+  },
+  "devDependencies": {
+    "jest": "29.7.0"
+  }
+}

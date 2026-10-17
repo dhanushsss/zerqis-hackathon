@@ -1,0 +1,63 @@
+2026-10-14T09:12:35.0370000Z Current runner version: '2.329.0'
+2026-10-14T09:12:35.0740000Z Operating System
+2026-10-14T09:12:35.1110000Z   Ubuntu
+2026-10-14T09:12:35.1480000Z   24.04.3
+2026-10-14T09:12:35.1850000Z Runner Image
+2026-10-14T09:12:35.2220000Z   Image: ubuntu-24.04
+2026-10-14T09:12:35.2590000Z ##[group]Run actions/checkout@v4
+2026-10-14T09:12:35.2960000Z with:
+2026-10-14T09:12:35.3330000Z   repository: alibi-demo/checkout-service
+2026-10-14T09:12:35.3700000Z   token: ***
+2026-10-14T09:12:35.4070000Z ##[endgroup]
+2026-10-14T09:12:35.4440000Z Syncing repository: alibi-demo/checkout-service
+2026-10-14T09:12:35.4810000Z HEAD is now at 8aac301 docs: document retry queue tuning knobs
+2026-10-14T09:12:35.5180000Z ##[group]Run actions/setup-node@v4
+2026-10-14T09:12:35.5550000Z Set up Node.js 20
+2026-10-14T09:12:35.5920000Z ##[endgroup]
+2026-10-14T09:12:35.6290000Z ##[group]Run npm ci
+2026-10-14T09:12:35.6660000Z npm ci
+2026-10-14T09:12:35.7030000Z ##[endgroup]
+2026-10-14T09:12:35.7400000Z npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+2026-10-14T09:12:35.7770000Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-10-14T09:12:35.8140000Z 
+2026-10-14T09:12:35.8510000Z added 267 packages in 3s
+2026-10-14T09:12:35.8880000Z ##[group]Run npm test
+2026-10-14T09:12:35.9250000Z npm test
+2026-10-14T09:12:35.9620000Z ##[endgroup]
+2026-10-14T09:12:35.9990000Z 
+2026-10-14T09:12:36.0360000Z > checkout-service@1.4.0 test
+2026-10-14T09:12:36.0730000Z > jest --ci --showSeed --seed=1849273600
+2026-10-14T09:12:36.1100000Z 
+2026-10-14T09:12:36.1470000Z FAIL test/retryQueue.test.js
+2026-10-14T09:12:36.1840000Z   ● planDeliveries › delivers notifications in submission order
+2026-10-14T09:12:36.2210000Z 
+2026-10-14T09:12:36.2580000Z     expect(received).toEqual(expected) // deep equality
+2026-10-14T09:12:36.2950000Z 
+2026-10-14T09:12:36.3320000Z     - Expected  - 1
+2026-10-14T09:12:36.3690000Z     + Received  + 1
+2026-10-14T09:12:36.4060000Z 
+2026-10-14T09:12:36.4430000Z       Array [
+2026-10-14T09:12:36.4800000Z     -   "order.created",
+2026-10-14T09:12:36.5170000Z         "order.paid",
+2026-10-14T09:12:36.5540000Z     +   "order.created",
+2026-10-14T09:12:36.5910000Z       ]
+2026-10-14T09:12:36.6280000Z 
+2026-10-14T09:12:36.6650000Z     [0m [90m 11 |[39m   test([32m'delivers notifications in submission order'[39m[33m,[39m () [33m=>[39m {
+2026-10-14T09:12:36.7020000Z      [90m 12 |[39m     [36mconst[39m planned [33m=[39m planDeliveries([[32m'order.created'[39m[33m,[39m [32m'order.paid'[39m][33m,[39m { random[33m:[39m createRng(jest[33m.[39mgetSeed()) })[33m;[39m
+2026-10-14T09:12:36.7390000Z     [31m[1m>[22m[39m[90m 13 |[39m     expect(planned)[33m.[39mtoEqual([[32m'order.created'[39m[33m,[39m [32m'order.paid'[39m])[33m;[39m
+2026-10-14T09:12:36.7760000Z      [90m    |[39m                     [31m[1m^[22m[39m
+2026-10-14T09:12:36.8130000Z      [90m 14 |[39m   })[33m;[39m
+2026-10-14T09:12:36.8500000Z      [90m 15 |[39m })[33m;[39m
+2026-10-14T09:12:36.8870000Z      [90m 16 |[39m[0m
+2026-10-14T09:12:36.9240000Z 
+2026-10-14T09:12:36.9610000Z       at Object.toEqual (test/retryQueue.test.js:13:21)
+2026-10-14T09:12:36.9980000Z 
+2026-10-14T09:12:37.0350000Z PASS test/cart.test.js
+2026-10-14T09:12:37.0720000Z 
+2026-10-14T09:12:37.1090000Z Seed:        1849273600
+2026-10-14T09:12:37.1460000Z Test Suites: 1 failed, 1 passed, 2 total
+2026-10-14T09:12:37.1830000Z Tests:       1 failed, 4 passed, 5 total
+2026-10-14T09:12:37.2200000Z Snapshots:   0 total
+2026-10-14T09:12:37.2570000Z Time:        0.442 s
+2026-10-14T09:12:37.2940000Z Ran all test suites.
+2026-10-14T09:12:37.3310000Z ##[error]Process completed with exit code 1.

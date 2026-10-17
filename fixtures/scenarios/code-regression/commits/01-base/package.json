@@ -1,0 +1,12 @@
+{
+  "name": "pricing-engine",
+  "version": "2.3.0",
+  "private": true,
+  "description": "Order discount and tax calculation.",
+  "scripts": {
+    "test": "jest --ci"
+  },
+  "devDependencies": {
+    "jest": "29.7.0"
+  }
+}

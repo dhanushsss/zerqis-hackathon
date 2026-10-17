@@ -1,0 +1,1704 @@
+{
+ "investigation": {
+  "id": "inv_mvafpl2qc5b70829",
+  "createdAt": "2026-10-16T03:55:12.242Z",
+  "updatedAt": "2026-10-16T03:55:54.577Z",
+  "status": "completed",
+  "stage": "Complete",
+  "scenarioId": "code-regression",
+  "mode": "live",
+  "repoUrl": null,
+  "parentSha": "e737f84129fa00df0457e883f9d152fb720b5351",
+  "branch": "main",
+  "workflow": "CI",
+  "job": "test (node 20)",
+  "runId": null,
+  "runUrl": null,
+  "prNumber": null,
+  "prUrl": null,
+  "commitMessage": "refactor: table-driven discount tiers and frozen tax rates",
+  "commitAuthor": "Marco Silva",
+  "framework": "jest",
+  "failureSignature": "jest: test/discounts.test.js \u203a discountRate applies 10% at exactly the $100.00 threshold (+1 more) \u2014 expect(received).toBe(expected) // Object.is equality",
+  "classification": "code_regression",
+  "summary": "Discount logic uses strict greater-than instead of greater-or-equal, causing exact thresholds ($100, $250) to skip intended tiers.",
+  "verdict": "confirmed",
+  "confidence": {
+   "label": "strong",
+   "basis": [
+    "Failure reproduced in a clean sandbox at the failing commit.",
+    "Repeated 10\u00d7: 10 failed, 0 passed (observed 100%, 95% CI 72%\u2013100%).",
+    "Parent commit: 0/3 runs failed.",
+    "A candidate fix passed the failing selection and the regression suite (Targeted fix by Nemotron-3-Ultra-550b-a55b; Revert src/discounts.js, src/tax.js to the parent commit)."
+   ]
+  },
+  "primaryHypothesis": "H1",
+  "recommendedAction": "code_patch",
+  "remediationType": "code_patch",
+  "limitations": [
+   "Only tested discount logic; did not isolate roundCents behavior or tax module interactions directly."
+  ],
+  "error": null,
+  "logStats": {
+   "totalLines": 74,
+   "totalChars": 4795,
+   "sentChars": 1697,
+   "excerptCount": 3,
+   "redactions": 0
+  },
+  "modelsUsed": {
+   "triage": "nvidia/Nemotron-3_5-Lightning",
+   "verdict": "nvidia/nemotron-3-super-120b-a12b",
+   "patch": "nvidia/Nemotron-3-Ultra-550b-a55b"
+  },
+  "verdictHistory": [
+   {
+    "at": "2026-10-16T03:55:15.617Z",
+    "stage": "Hypotheses formed",
+    "verdict": null,
+    "confidence": "none",
+    "note": "3 competing hypotheses; no experiment has run yet."
+   },
+   {
+    "at": "2026-10-16T03:55:39.509Z",
+    "stage": "Experiments weighed",
+    "verdict": "probable",
+    "confidence": "moderate",
+    "note": "Observed \u2014 reproduction 1/1 failed; repeated runs 10/10 failed; parent commit 0/3 failed. Evidence rubric: moderate. \"Confirmed\" requires strong experimental evidence; the evidence rubric rates it moderate."
+   },
+   {
+    "at": "2026-10-16T03:55:54.577Z",
+    "stage": "Remediation tested",
+    "verdict": "confirmed",
+    "confidence": "strong",
+    "note": "Evidence rubric: strong."
+   }
+  ],
+  "options": {
+   "repeat": 10,
+   "requestedMode": "live"
+  },
+  "artifacts": [],
+  "source": "demo",
+  "repository": "alibi-demo/pricing-engine",
+  "commitSha": "bf9572720abd6342ed8f537b9222c08c9c66b510"
+ },
+ "hypotheses": [
+  {
+   "id": "hyp_mvafpnof16216e5c",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "key": "H1",
+   "cause": "Operator regression: `>=` changed to `>` in tier qualification, causing exact threshold amounts to fall through to the default rate 0.",
+   "category": "code_regression",
+   "origin": "model",
+   "supporting": [
+    {
+     "text": "if (subtotalCents >= tier.minCents) return tier.rate;",
+     "logLine": 10,
+     "verified": true
+    },
+    {
+     "text": "const tier = TIERS.find((t) => subtotalCents > t.minCents);",
+     "logLine": 14,
+     "verified": true
+    },
+    {
+     "text": "Expected: 0.1 | Received: 0",
+     "logLine": 10,
+     "verified": false
+    }
+   ],
+   "contradicting": [],
+   "prior": "high",
+   "status": "supported",
+   "assessment": "Deterministic failure reproduced at current commit; parent commit passes same test; failure persists across retries.",
+   "nextExperiment": "compare_parent",
+   "rank": 0,
+   "requested": [
+    "compare_parent",
+    "reproduce"
+   ]
+  },
+  {
+   "id": "hyp_mvafpnog8702af5a",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "key": "H2",
+   "cause": "New `roundCents` function silently truncates the discount calculation, producing incorrect rates for edge-case subtotals.",
+   "category": "code_regression",
+   "origin": "model",
+   "supporting": [
+    {
+     "text": "const discountCents = roundCents(subtotalCents * rate);",
+     "logLine": 22,
+     "verified": true
+    },
+    {
+     "text": "function roundCents(value) { return Math.floor(value); }",
+     "logLine": 18,
+     "verified": false
+    }
+   ],
+   "contradicting": [],
+   "prior": "medium",
+   "status": "refuted",
+   "assessment": "No experiment tested H2; but given H1 explains all observations precisely, H2 is unnecessary.",
+   "nextExperiment": "reproduce",
+   "rank": 1,
+   "requested": [
+    "reproduce"
+   ]
+  },
+  {
+   "id": "hyp_mvafpnog37fddebc",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "key": "H3",
+   "cause": "Tax.js `Object.freeze` and `hasOwnProperty` change introduced a module loading side-effect that corrupts the discounts module scope.",
+   "category": "infrastructure",
+   "origin": "model",
+   "supporting": [
+    {
+     "text": "const RATES = Object.freeze({ CA: 0.0725, NY: 0.04, TX: 0.0625 });",
+     "logLine": 13,
+     "verified": true
+    },
+    {
+     "text": "const rate = Object.prototype.hasOwnProperty.call(RATES, state) ? RATES[state] : 0;",
+     "logLine": 16,
+     "verified": true
+    }
+   ],
+   "contradicting": [],
+   "prior": "low",
+   "status": "refuted",
+   "assessment": "External search yielded no actionable evidence; no experiment isolated tax-module side effects.",
+   "nextExperiment": "external_search",
+   "rank": 2,
+   "requested": [
+    "external_search"
+   ]
+  }
+ ],
+ "experiments": [
+  {
+   "id": "exp_mvafpnqj01f7d577",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H1",
+   "kind": "reproduce",
+   "title": "Reproduce the failure",
+   "reason": "Re-run test/discounts.test.js at the failing commit in a clean, offline sandbox.",
+   "status": "failed",
+   "backend": "docker",
+   "command": [
+    "node",
+    "node_modules/jest/bin/jest.js",
+    "--ci",
+    "--json",
+    "--outputFile=/work/.alibi/result-exp_mvafpnqj01f7d577-1.json",
+    "--runTestsByPath",
+    "test/discounts.test.js"
+   ],
+   "environment": {
+    "backend": "docker",
+    "image": "node:20-bookworm-slim",
+    "network": "none",
+    "user": "1000:1000",
+    "cpus": "1.5",
+    "memory": "1536m",
+    "readOnlyRoot": true,
+    "capabilities": "all dropped",
+    "timeoutSec": 180,
+    "dependencyInstall": [
+     {
+      "exitCode": 0,
+      "durationMs": 2088,
+      "network": "bridge (install only)"
+     }
+    ]
+   },
+   "commitSha": "bf9572720abd6342ed8f537b9222c08c9c66b510",
+   "testSelection": "test/discounts.test.js",
+   "plannedAttempts": 1,
+   "startedAt": "2026-10-16T03:55:18.046Z",
+   "finishedAt": "2026-10-16T03:55:18.914Z",
+   "durationMs": 868,
+   "result": {
+    "attempts": [
+     {
+      "index": 1,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 866,
+      "tests": {
+       "total": 5,
+       "passed": 3,
+       "failed": 2,
+       "failedNames": [
+        "discountRate applies 10% at exactly the $100.00 threshold",
+        "discountRate applies 15% from $250"
+       ]
+      },
+      "outputTail": "xpect(discountRate(\u001b[35m25000\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[35m0.15\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                 \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 15 |\u001b[39m   })\u001b[33m;\u001b[39m\n     \u001b[90m 16 |\u001b[39m\n     \u001b[90m 17 |\u001b[39m   test(\u001b[32m'applies 20% from $500'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\n\n      at Object.toBe (test/discounts.test.js:14:33)\n\nTest Suites: 1 failed, 1 total\nTests:       2 failed, 3 passed, 5 total\nSnapshots:   0 total\nTime:        0.362 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqj01f7d577-1.json\n"
+     }
+    ],
+    "passes": 0,
+    "failures": 1
+   },
+   "observation": "1/1 run failed \u2014 failing: discountRate applies 10% at exactly the $100.00 threshold; discountRate applies 15% from $250",
+   "effect": "Supports H1: The failure reproduced in a clean sandbox at the failing commit.\nSupports H2: The failure reproduced in a clean sandbox at the failing commit.\nContradicts H3: The failure reproduced offline in a clean sandbox, away from the original CI infrastructure.",
+   "patchId": null
+  },
+  {
+   "id": "exp_mvafpnqjcf023574",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H1",
+   "kind": "repeat",
+   "title": "Run the failing test 10\u00d7 with varied seeds",
+   "reason": "Measures intermittency at the same commit. Seeds are attempt \u00d7 65537 so every run is replayable. 10 runs bound, but do not pin down, the true failure rate.",
+   "status": "failed",
+   "backend": "docker",
+   "command": [
+    "node",
+    "node_modules/jest/bin/jest.js",
+    "--ci",
+    "--json",
+    "--outputFile=/work/.alibi/result-exp_mvafpnqjcf023574-10.json",
+    "--seed=655370",
+    "--runTestsByPath",
+    "test/discounts.test.js"
+   ],
+   "environment": {
+    "backend": "docker",
+    "image": "node:20-bookworm-slim",
+    "network": "none",
+    "user": "1000:1000",
+    "cpus": "1.5",
+    "memory": "1536m",
+    "readOnlyRoot": true,
+    "capabilities": "all dropped",
+    "timeoutSec": 180,
+    "dependencyInstall": [
+     {
+      "exitCode": 0,
+      "durationMs": 2088,
+      "network": "bridge (install only)"
+     }
+    ]
+   },
+   "commitSha": "bf9572720abd6342ed8f537b9222c08c9c66b510",
+   "testSelection": "test/discounts.test.js",
+   "plannedAttempts": 10,
+   "startedAt": "2026-10-16T03:55:18.915Z",
+   "finishedAt": "2026-10-16T03:55:27.563Z",
+   "durationMs": 8648,
+   "result": {
+    "attempts": [
+     {
+      "index": 1,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 845,
+      "seed": 65537,
+      "tests": {
+       "total": 5,
+       "passed": 3,
+       "failed": 2,
+       "failedNames": [
+        "discountRate applies 10% at exactly the $100.00 threshold",
+        "discountRate applies 15% from $250"
+       ]
+      },
+      "outputTail": "xpect(discountRate(\u001b[35m25000\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[35m0.15\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                 \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 15 |\u001b[39m   })\u001b[33m;\u001b[39m\n     \u001b[90m 16 |\u001b[39m\n     \u001b[90m 17 |\u001b[39m   test(\u001b[32m'applies 20% from $500'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\n\n      at Object.toBe (test/discounts.test.js:14:33)\n\nTest Suites: 1 failed, 1 total\nTests:       2 failed, 3 passed, 5 total\nSnapshots:   0 total\nTime:        0.355 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjcf023574-1.json\n"
+     },
+     {
+      "index": 2,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 861,
+      "seed": 131074,
+      "tests": {
+       "total": 5,
+       "passed": 3,
+       "failed": 2,
+       "failedNames": [
+        "discountRate applies 10% at exactly the $100.00 threshold",
+        "discountRate applies 15% from $250"
+       ]
+      },
+      "outputTail": "expect(discountRate(\u001b[35m25000\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[35m0.15\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                 \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 15 |\u001b[39m   })\u001b[33m;\u001b[39m\n     \u001b[90m 16 |\u001b[39m\n     \u001b[90m 17 |\u001b[39m   test(\u001b[32m'applies 20% from $500'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\n\n      at Object.toBe (test/discounts.test.js:14:33)\n\nTest Suites: 1 failed, 1 total\nTests:       2 failed, 3 passed, 5 total\nSnapshots:   0 total\nTime:        0.31 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjcf023574-2.json\n"
+     },
+     {
+      "index": 3,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 834,
+      "seed": 196611,
+      "tests": {
+       "total": 5,
+       "passed": 3,
+       "failed": 2,
+       "failedNames": [
+        "discountRate applies 10% at exactly the $100.00 threshold",
+        "discountRate applies 15% from $250"
+       ]
+      },
+      "outputTail": "xpect(discountRate(\u001b[35m25000\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[35m0.15\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                 \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 15 |\u001b[39m   })\u001b[33m;\u001b[39m\n     \u001b[90m 16 |\u001b[39m\n     \u001b[90m 17 |\u001b[39m   test(\u001b[32m'applies 20% from $500'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\n\n      at Object.toBe (test/discounts.test.js:14:33)\n\nTest Suites: 1 failed, 1 total\nTests:       2 failed, 3 passed, 5 total\nSnapshots:   0 total\nTime:        0.391 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjcf023574-3.json\n"
+     },
+     {
+      "index": 4,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 790,
+      "seed": 262148,
+      "tests": {
+       "total": 5,
+       "passed": 3,
+       "failed": 2,
+       "failedNames": [
+        "discountRate applies 10% at exactly the $100.00 threshold",
+        "discountRate applies 15% from $250"
+       ]
+      },
+      "outputTail": "xpect(discountRate(\u001b[35m25000\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[35m0.15\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                 \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 15 |\u001b[39m   })\u001b[33m;\u001b[39m\n     \u001b[90m 16 |\u001b[39m\n     \u001b[90m 17 |\u001b[39m   test(\u001b[32m'applies 20% from $500'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\n\n      at Object.toBe (test/discounts.test.js:14:33)\n\nTest Suites: 1 failed, 1 total\nTests:       2 failed, 3 passed, 5 total\nSnapshots:   0 total\nTime:        0.327 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjcf023574-4.json\n"
+     },
+     {
+      "index": 5,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 875,
+      "seed": 327685,
+      "tests": {
+       "total": 5,
+       "passed": 3,
+       "failed": 2,
+       "failedNames": [
+        "discountRate applies 10% at exactly the $100.00 threshold",
+        "discountRate applies 15% from $250"
+       ]
+      },
+      "outputTail": "xpect(discountRate(\u001b[35m25000\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[35m0.15\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                 \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 15 |\u001b[39m   })\u001b[33m;\u001b[39m\n     \u001b[90m 16 |\u001b[39m\n     \u001b[90m 17 |\u001b[39m   test(\u001b[32m'applies 20% from $500'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\n\n      at Object.toBe (test/discounts.test.js:14:33)\n\nTest Suites: 1 failed, 1 total\nTests:       2 failed, 3 passed, 5 total\nSnapshots:   0 total\nTime:        0.398 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjcf023574-5.json\n"
+     },
+     {
+      "index": 6,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 853,
+      "seed": 393222,
+      "tests": {
+       "total": 5,
+       "passed": 3,
+       "failed": 2,
+       "failedNames": [
+        "discountRate applies 10% at exactly the $100.00 threshold",
+        "discountRate applies 15% from $250"
+       ]
+      },
+      "outputTail": "xpect(discountRate(\u001b[35m25000\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[35m0.15\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                 \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 15 |\u001b[39m   })\u001b[33m;\u001b[39m\n     \u001b[90m 16 |\u001b[39m\n     \u001b[90m 17 |\u001b[39m   test(\u001b[32m'applies 20% from $500'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\n\n      at Object.toBe (test/discounts.test.js:14:33)\n\nTest Suites: 1 failed, 1 total\nTests:       2 failed, 3 passed, 5 total\nSnapshots:   0 total\nTime:        0.333 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjcf023574-6.json\n"
+     },
+     {
+      "index": 7,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 834,
+      "seed": 458759,
+      "tests": {
+       "total": 5,
+       "passed": 3,
+       "failed": 2,
+       "failedNames": [
+        "discountRate applies 10% at exactly the $100.00 threshold",
+        "discountRate applies 15% from $250"
+       ]
+      },
+      "outputTail": "xpect(discountRate(\u001b[35m25000\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[35m0.15\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                 \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 15 |\u001b[39m   })\u001b[33m;\u001b[39m\n     \u001b[90m 16 |\u001b[39m\n     \u001b[90m 17 |\u001b[39m   test(\u001b[32m'applies 20% from $500'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\n\n      at Object.toBe (test/discounts.test.js:14:33)\n\nTest Suites: 1 failed, 1 total\nTests:       2 failed, 3 passed, 5 total\nSnapshots:   0 total\nTime:        0.327 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjcf023574-7.json\n"
+     },
+     {
+      "index": 8,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 798,
+      "seed": 524296,
+      "tests": {
+       "total": 5,
+       "passed": 3,
+       "failed": 2,
+       "failedNames": [
+        "discountRate applies 10% at exactly the $100.00 threshold",
+        "discountRate applies 15% from $250"
+       ]
+      },
+      "outputTail": "xpect(discountRate(\u001b[35m25000\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[35m0.15\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                 \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 15 |\u001b[39m   })\u001b[33m;\u001b[39m\n     \u001b[90m 16 |\u001b[39m\n     \u001b[90m 17 |\u001b[39m   test(\u001b[32m'applies 20% from $500'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\n\n      at Object.toBe (test/discounts.test.js:14:33)\n\nTest Suites: 1 failed, 1 total\nTests:       2 failed, 3 passed, 5 total\nSnapshots:   0 total\nTime:        0.314 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjcf023574-8.json\n"
+     },
+     {
+      "index": 9,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 1087,
+      "seed": 589833,
+      "tests": {
+       "total": 5,
+       "passed": 3,
+       "failed": 2,
+       "failedNames": [
+        "discountRate applies 10% at exactly the $100.00 threshold",
+        "discountRate applies 15% from $250"
+       ]
+      },
+      "outputTail": "xpect(discountRate(\u001b[35m25000\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[35m0.15\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                 \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 15 |\u001b[39m   })\u001b[33m;\u001b[39m\n     \u001b[90m 16 |\u001b[39m\n     \u001b[90m 17 |\u001b[39m   test(\u001b[32m'applies 20% from $500'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\n\n      at Object.toBe (test/discounts.test.js:14:33)\n\nTest Suites: 1 failed, 1 total\nTests:       2 failed, 3 passed, 5 total\nSnapshots:   0 total\nTime:        0.552 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjcf023574-9.json\n"
+     },
+     {
+      "index": 10,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 861,
+      "seed": 655370,
+      "tests": {
+       "total": 5,
+       "passed": 3,
+       "failed": 2,
+       "failedNames": [
+        "discountRate applies 10% at exactly the $100.00 threshold",
+        "discountRate applies 15% from $250"
+       ]
+      },
+      "outputTail": "pect(discountRate(\u001b[35m25000\u001b[39m))\u001b[33m.\u001b[39mtoBe(\u001b[35m0.15\u001b[39m)\u001b[33m;\u001b[39m\n     \u001b[90m    |\u001b[39m                                 \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n     \u001b[90m 15 |\u001b[39m   })\u001b[33m;\u001b[39m\n     \u001b[90m 16 |\u001b[39m\n     \u001b[90m 17 |\u001b[39m   test(\u001b[32m'applies 20% from $500'\u001b[39m\u001b[33m,\u001b[39m () \u001b[33m=>\u001b[39m {\u001b[0m\n\n      at Object.toBe (test/discounts.test.js:14:33)\n\nTest Suites: 1 failed, 1 total\nTests:       2 failed, 3 passed, 5 total\nSnapshots:   0 total\nTime:        0.295 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjcf023574-10.json\n"
+     }
+    ],
+    "passes": 0,
+    "failures": 10,
+    "failureRate": {
+     "rate": 1,
+     "low": 0.7224598312333834,
+     "high": 1,
+     "n": 10
+    }
+   },
+   "observation": "10/10 runs failed \u2014 failing: discountRate applies 10% at exactly the $100.00 threshold; discountRate applies 15% from $250 (observed failure rate 100%, 95% CI 72\u2013100%)",
+   "effect": "Supports H1: Failed deterministically: 10/10 runs.\nSupports H2: Failed deterministically: 10/10 runs.",
+   "patchId": null
+  },
+  {
+   "id": "exp_mvafpnqjd6b637ff",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H1",
+   "kind": "compare_parent",
+   "title": "Compare against the parent commit",
+   "reason": "Runs the same selection at the parent e737f84129fa. If the parent passes, the failing commit introduced the failure.",
+   "status": "passed",
+   "backend": "docker",
+   "command": [
+    "node",
+    "node_modules/jest/bin/jest.js",
+    "--ci",
+    "--json",
+    "--outputFile=/work/.alibi/result-exp_mvafpnqjd6b637ff-3.json",
+    "--seed=131074",
+    "--runTestsByPath",
+    "test/discounts.test.js"
+   ],
+   "environment": {
+    "backend": "docker",
+    "image": "node:20-bookworm-slim",
+    "network": "none",
+    "user": "1000:1000",
+    "cpus": "1.5",
+    "memory": "1536m",
+    "readOnlyRoot": true,
+    "capabilities": "all dropped",
+    "timeoutSec": 180,
+    "dependencyInstall": [
+     {
+      "exitCode": 0,
+      "durationMs": 1983,
+      "network": "bridge (install only)"
+     }
+    ]
+   },
+   "commitSha": "e737f84129fa00df0457e883f9d152fb720b5351",
+   "testSelection": "test/discounts.test.js",
+   "plannedAttempts": 3,
+   "startedAt": "2026-10-16T03:55:29.772Z",
+   "finishedAt": "2026-10-16T03:55:32.369Z",
+   "durationMs": 2597,
+   "result": {
+    "attempts": [
+     {
+      "index": 1,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 867,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "PASS test/discounts.test.js\n  discountRate\n    \u2713 no discount below $100 (1 ms)\n    \u2713 applies 10% at exactly the $100.00 threshold\n    \u2713 applies 15% from $250\n    \u2713 applies 20% from $500\n  applyDiscount\n    \u2713 returns the discounted total in cents (1 ms)\n\nTest Suites: 1 passed, 1 total\nTests:       5 passed, 5 total\nSnapshots:   0 total\nTime:        0.326 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjd6b637ff-1.json\n"
+     },
+     {
+      "index": 2,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 922,
+      "seed": 65537,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "PASS test/discounts.test.js\n  discountRate\n    \u2713 no discount below $100 (1 ms)\n    \u2713 applies 10% at exactly the $100.00 threshold\n    \u2713 applies 15% from $250\n    \u2713 applies 20% from $500\n  applyDiscount\n    \u2713 returns the discounted total in cents (1 ms)\n\nTest Suites: 1 passed, 1 total\nTests:       5 passed, 5 total\nSnapshots:   0 total\nTime:        0.397 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjd6b637ff-2.json\n"
+     },
+     {
+      "index": 3,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 806,
+      "seed": 131074,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "PASS test/discounts.test.js\n  discountRate\n    \u2713 no discount below $100 (2 ms)\n    \u2713 applies 10% at exactly the $100.00 threshold\n    \u2713 applies 15% from $250 (1 ms)\n    \u2713 applies 20% from $500\n  applyDiscount\n    \u2713 returns the discounted total in cents\n\nTest Suites: 1 passed, 1 total\nTests:       5 passed, 5 total\nSnapshots:   0 total\nTime:        0.332 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafpnqjd6b637ff-3.json\n"
+     }
+    ],
+    "passes": 3,
+    "failures": 0,
+    "failureRate": {
+     "rate": 0,
+     "low": 0,
+     "high": 0.5615060804490177,
+     "n": 3
+    }
+   },
+   "observation": "0/3 runs failed (observed failure rate 0%, 95% CI 0\u201356%)",
+   "effect": "Supports H1: The parent commit passed 3/3 runs of the same selection.\nSupports H2: The parent commit passed 3/3 runs of the same selection.",
+   "patchId": null
+  },
+  {
+   "id": "exp_mvafpnqje921e13c",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H3",
+   "kind": "external_search",
+   "title": "Search for external evidence",
+   "reason": "A hypothesis implicates an external dependency or service; search release notes, issues, and status pages for corroboration.",
+   "status": "passed",
+   "backend": "tavily",
+   "command": [
+    "tavily.search(\"alibi CI forensics discount tier operator regression\")",
+    "tavily.search(\"jest test discountRate threshold > vs >=\")"
+   ],
+   "environment": {
+    "backend": "tavily",
+    "endpoint": "https://api.tavily.com/search",
+    "search_depth": "basic"
+   },
+   "commitSha": null,
+   "testSelection": null,
+   "plannedAttempts": 0,
+   "startedAt": "2026-10-16T03:55:32.372Z",
+   "finishedAt": "2026-10-16T03:55:37.238Z",
+   "durationMs": 4866,
+   "result": null,
+   "observation": "2 Tavily queries returned 8 result(s), 0 from primary sources.",
+   "effect": "Search results are leads that can corroborate a hypothesis; they are not proof on their own.",
+   "patchId": null
+  },
+  {
+   "id": "exp_mvafq9aua6b6741d",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H1",
+   "kind": "validate_patch",
+   "title": "Validate: Targeted fix by Nemotron-3-Ultra-550b-a55b",
+   "reason": "Runs the originally failing selection 3\u00d7 with the candidate applied to the failing commit.",
+   "status": "passed",
+   "backend": "docker",
+   "command": [
+    "node",
+    "node_modules/jest/bin/jest.js",
+    "--ci",
+    "--json",
+    "--outputFile=/work/.alibi/result-exp_mvafq9aua6b6741d-3.json",
+    "--seed=196611",
+    "--runTestsByPath",
+    "test/discounts.test.js"
+   ],
+   "environment": {
+    "backend": "docker",
+    "image": "node:20-bookworm-slim",
+    "network": "none",
+    "user": "1000:1000",
+    "cpus": "1.5",
+    "memory": "1536m",
+    "readOnlyRoot": true,
+    "capabilities": "all dropped",
+    "timeoutSec": 180,
+    "dependencyInstall": [
+     {
+      "exitCode": 0,
+      "durationMs": 2142,
+      "network": "bridge (install only)"
+     }
+    ]
+   },
+   "commitSha": "bf9572720abd6342ed8f537b9222c08c9c66b510",
+   "testSelection": "test/discounts.test.js + patch",
+   "plannedAttempts": 3,
+   "startedAt": "2026-10-16T03:55:43.638Z",
+   "finishedAt": "2026-10-16T03:55:46.385Z",
+   "durationMs": 2747,
+   "result": {
+    "attempts": [
+     {
+      "index": 1,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 890,
+      "seed": 65537,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "PASS test/discounts.test.js\n  discountRate\n    \u2713 no discount below $100 (1 ms)\n    \u2713 applies 10% at exactly the $100.00 threshold\n    \u2713 applies 15% from $250\n    \u2713 applies 20% from $500\n  applyDiscount\n    \u2713 returns the discounted total in cents (1 ms)\n\nTest Suites: 1 passed, 1 total\nTests:       5 passed, 5 total\nSnapshots:   0 total\nTime:        0.375 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafq9aua6b6741d-1.json\n"
+     },
+     {
+      "index": 2,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 1016,
+      "seed": 131074,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "PASS test/discounts.test.js\n  discountRate\n    \u2713 no discount below $100 (1 ms)\n    \u2713 applies 10% at exactly the $100.00 threshold\n    \u2713 applies 15% from $250\n    \u2713 applies 20% from $500\n  applyDiscount\n    \u2713 returns the discounted total in cents\n\nTest Suites: 1 passed, 1 total\nTests:       5 passed, 5 total\nSnapshots:   0 total\nTime:        0.359 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafq9aua6b6741d-2.json\n"
+     },
+     {
+      "index": 3,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 841,
+      "seed": 196611,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "PASS test/discounts.test.js\n  discountRate\n    \u2713 no discount below $100 (1 ms)\n    \u2713 applies 10% at exactly the $100.00 threshold\n    \u2713 applies 15% from $250\n    \u2713 applies 20% from $500\n  applyDiscount\n    \u2713 returns the discounted total in cents\n\nTest Suites: 1 passed, 1 total\nTests:       5 passed, 5 total\nSnapshots:   0 total\nTime:        0.341 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafq9aua6b6741d-3.json\n"
+     }
+    ],
+    "passes": 3,
+    "failures": 0,
+    "failureRate": {
+     "rate": 0,
+     "low": 0,
+     "high": 0.5615060804490177,
+     "n": 3
+    }
+   },
+   "observation": "0/3 runs failed (observed failure rate 0%, 95% CI 0\u201356%)",
+   "effect": "The candidate makes the failing selection pass.",
+   "patchId": "patch_mvafq7f2bdb90ceb"
+  },
+  {
+   "id": "exp_mvafqbf5b220841a",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H1",
+   "kind": "regression_suite",
+   "title": "Regression suite: Targeted fix by Nemotron-3-Ultra-550b-a55b",
+   "reason": "Runs the full test suite with the candidate applied, to catch collateral breakage.",
+   "status": "passed",
+   "backend": "docker",
+   "command": [
+    "node",
+    "node_modules/jest/bin/jest.js",
+    "--ci",
+    "--json",
+    "--outputFile=/work/.alibi/result-exp_mvafqbf5b220841a-1.json",
+    "--seed=65537"
+   ],
+   "environment": {
+    "backend": "docker",
+    "image": "node:20-bookworm-slim",
+    "network": "none",
+    "user": "1000:1000",
+    "cpus": "1.5",
+    "memory": "1536m",
+    "readOnlyRoot": true,
+    "capabilities": "all dropped",
+    "timeoutSec": 180,
+    "dependencyInstall": [
+     {
+      "exitCode": 0,
+      "durationMs": 2142,
+      "network": "bridge (install only)"
+     }
+    ]
+   },
+   "commitSha": "bf9572720abd6342ed8f537b9222c08c9c66b510",
+   "testSelection": "full test suite + patch",
+   "plannedAttempts": 1,
+   "startedAt": "2026-10-16T03:55:46.385Z",
+   "finishedAt": "2026-10-16T03:55:47.388Z",
+   "durationMs": 1003,
+   "result": {
+    "attempts": [
+     {
+      "index": 1,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 1001,
+      "seed": 65537,
+      "tests": {
+       "total": 7,
+       "passed": 7,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "PASS test/discounts.test.js\nPASS test/tax.test.js\n\nTest Suites: 2 passed, 2 total\nTests:       7 passed, 7 total\nSnapshots:   0 total\nTime:        0.379 s\nRan all test suites.\nTest results written to: .alibi/result-exp_mvafqbf5b220841a-1.json\n"
+     }
+    ],
+    "passes": 1,
+    "failures": 0
+   },
+   "observation": "0/1 run failed",
+   "effect": "No regressions in the full suite.",
+   "patchId": "patch_mvafq7f2bdb90ceb"
+  },
+  {
+   "id": "exp_mvafqee328372ff7",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H1",
+   "kind": "validate_patch",
+   "title": "Validate: Revert src/discounts.js, src/tax.js to the parent commit",
+   "reason": "Runs the originally failing selection 3\u00d7 with the candidate applied to the failing commit.",
+   "status": "passed",
+   "backend": "docker",
+   "command": [
+    "node",
+    "node_modules/jest/bin/jest.js",
+    "--ci",
+    "--json",
+    "--outputFile=/work/.alibi/result-exp_mvafqee328372ff7-3.json",
+    "--seed=196611",
+    "--runTestsByPath",
+    "test/discounts.test.js"
+   ],
+   "environment": {
+    "backend": "docker",
+    "image": "node:20-bookworm-slim",
+    "network": "none",
+    "user": "1000:1000",
+    "cpus": "1.5",
+    "memory": "1536m",
+    "readOnlyRoot": true,
+    "capabilities": "all dropped",
+    "timeoutSec": 180,
+    "dependencyInstall": [
+     {
+      "exitCode": 0,
+      "durationMs": 2200,
+      "network": "bridge (install only)"
+     }
+    ]
+   },
+   "commitSha": "bf9572720abd6342ed8f537b9222c08c9c66b510",
+   "testSelection": "test/discounts.test.js + patch",
+   "plannedAttempts": 3,
+   "startedAt": "2026-10-16T03:55:50.235Z",
+   "finishedAt": "2026-10-16T03:55:53.583Z",
+   "durationMs": 3348,
+   "result": {
+    "attempts": [
+     {
+      "index": 1,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 1170,
+      "seed": 65537,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "PASS test/discounts.test.js\n  discountRate\n    \u2713 no discount below $100 (1 ms)\n    \u2713 applies 10% at exactly the $100.00 threshold\n    \u2713 applies 15% from $250\n    \u2713 applies 20% from $500\n  applyDiscount\n    \u2713 returns the discounted total in cents (1 ms)\n\nTest Suites: 1 passed, 1 total\nTests:       5 passed, 5 total\nSnapshots:   0 total\nTime:        0.608 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafqee328372ff7-1.json\n"
+     },
+     {
+      "index": 2,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 1274,
+      "seed": 131074,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "PASS test/discounts.test.js\n  discountRate\n    \u2713 no discount below $100 (3 ms)\n    \u2713 applies 10% at exactly the $100.00 threshold\n    \u2713 applies 15% from $250\n    \u2713 applies 20% from $500 (1 ms)\n  applyDiscount\n    \u2713 returns the discounted total in cents (1 ms)\n\nTest Suites: 1 passed, 1 total\nTests:       5 passed, 5 total\nSnapshots:   0 total\nTime:        0.396 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafqee328372ff7-2.json\n"
+     },
+     {
+      "index": 3,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 901,
+      "seed": 196611,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "PASS test/discounts.test.js\n  discountRate\n    \u2713 no discount below $100 (1 ms)\n    \u2713 applies 10% at exactly the $100.00 threshold\n    \u2713 applies 15% from $250\n    \u2713 applies 20% from $500\n  applyDiscount\n    \u2713 returns the discounted total in cents\n\nTest Suites: 1 passed, 1 total\nTests:       5 passed, 5 total\nSnapshots:   0 total\nTime:        0.329 s\nRan all test suites within paths \"test/discounts.test.js\".\nTest results written to: .alibi/result-exp_mvafqee328372ff7-3.json\n"
+     }
+    ],
+    "passes": 3,
+    "failures": 0,
+    "failureRate": {
+     "rate": 0,
+     "low": 0,
+     "high": 0.5615060804490177,
+     "n": 3
+    }
+   },
+   "observation": "0/3 runs failed (observed failure rate 0%, 95% CI 0\u201356%)",
+   "effect": "The candidate makes the failing selection pass.",
+   "patchId": "patch_mvafqcgy61bf1850"
+  },
+  {
+   "id": "exp_mvafqgz40b3262c7",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H1",
+   "kind": "regression_suite",
+   "title": "Regression suite: Revert src/discounts.js, src/tax.js to the parent commit",
+   "reason": "Runs the full test suite with the candidate applied, to catch collateral breakage.",
+   "status": "passed",
+   "backend": "docker",
+   "command": [
+    "node",
+    "node_modules/jest/bin/jest.js",
+    "--ci",
+    "--json",
+    "--outputFile=/work/.alibi/result-exp_mvafqgz40b3262c7-1.json",
+    "--seed=65537"
+   ],
+   "environment": {
+    "backend": "docker",
+    "image": "node:20-bookworm-slim",
+    "network": "none",
+    "user": "1000:1000",
+    "cpus": "1.5",
+    "memory": "1536m",
+    "readOnlyRoot": true,
+    "capabilities": "all dropped",
+    "timeoutSec": 180,
+    "dependencyInstall": [
+     {
+      "exitCode": 0,
+      "durationMs": 2200,
+      "network": "bridge (install only)"
+     }
+    ]
+   },
+   "commitSha": "bf9572720abd6342ed8f537b9222c08c9c66b510",
+   "testSelection": "full test suite + patch",
+   "plannedAttempts": 1,
+   "startedAt": "2026-10-16T03:55:53.584Z",
+   "finishedAt": "2026-10-16T03:55:54.574Z",
+   "durationMs": 990,
+   "result": {
+    "attempts": [
+     {
+      "index": 1,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 989,
+      "seed": 65537,
+      "tests": {
+       "total": 7,
+       "passed": 7,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "PASS test/discounts.test.js\nPASS test/tax.test.js\n\nTest Suites: 2 passed, 2 total\nTests:       7 passed, 7 total\nSnapshots:   0 total\nTime:        0.41 s\nRan all test suites.\nTest results written to: .alibi/result-exp_mvafqgz40b3262c7-1.json\n"
+     }
+    ],
+    "passes": 1,
+    "failures": 0
+   },
+   "observation": "0/1 run failed",
+   "effect": "No regressions in the full suite.",
+   "patchId": "patch_mvafqcgy61bf1850"
+  }
+ ],
+ "evidence": [
+  {
+   "kind": "observed_fact",
+   "title": "CI log loaded from demo fixture",
+   "detail": "The CI log for this scenario was captured from a real sandboxed run of alibi-demo/pricing-engine at bf9572720abd and stored as a fixture (fixtures/scenarios/code-regression/ci-log.txt).",
+   "hypothesisKey": null,
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "fixture",
+    "ref": "fixtures/scenarios/code-regression/ci-log.txt"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpl4m7907a9a8",
+   "seq": 1,
+   "createdAt": "2026-10-16T03:55:12.310Z"
+  },
+  {
+   "kind": "observed_fact",
+   "title": "Failing test: discountRate applies 10% at exactly the $100.00 threshold",
+   "detail": "file: test/discounts.test.js\nassertion: expect(received).toBe(expected) // Object.is equality | Expected: 0.1 | Received: 0",
+   "hypothesisKey": null,
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "log",
+    "lines": [
+     32,
+     44
+    ]
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpl4p998da234",
+   "seq": 2,
+   "createdAt": "2026-10-16T03:55:12.313Z"
+  },
+  {
+   "kind": "observed_fact",
+   "title": "Failing test: discountRate applies 15% from $250",
+   "detail": "file: test/discounts.test.js\nassertion: expect(received).toBe(expected) // Object.is equality | Expected: 0.1 | Received: 0",
+   "hypothesisKey": null,
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "log",
+    "lines": [
+     49,
+     61
+    ]
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpl4p0ad173ff",
+   "seq": 3,
+   "createdAt": "2026-10-16T03:55:12.313Z"
+  },
+  {
+   "kind": "observed_fact",
+   "title": "Commit changes 2 file(s)",
+   "detail": "src/discounts.js (+9/\u22127)\nsrc/tax.js (+2/\u22122)",
+   "hypothesisKey": null,
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "git",
+    "ref": "e737f84129fa..bf9572720abd"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpl4pb385afea",
+   "seq": 4,
+   "createdAt": "2026-10-16T03:55:12.313Z"
+  },
+  {
+   "kind": "model_hypothesis",
+   "title": "H1: Operator regression: `>=` changed to `>` in tier qualification, causing exact threshold amounts to fall through to the default rate 0.",
+   "detail": "Category: code_regression; prior: high.\nCited support: \"if (subtotalCents >= tier.minCents) return tier.rate;\" (line 10); \"const tier = TIERS.find((t) => subtotalCents > t.minCents);\" (line 14); \"Expected: 0.1 | Received: 0\" (line 10) [not found in log]\n1 cited quote(s) could not be found in the log or diff.",
+   "hypothesisKey": "H1",
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "model",
+    "ref": "nvidia/Nemotron-3_5-Lightning"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpnog9b4e6a1e",
+   "seq": 5,
+   "createdAt": "2026-10-16T03:55:15.616Z"
+  },
+  {
+   "kind": "model_hypothesis",
+   "title": "H2: New `roundCents` function silently truncates the discount calculation, producing incorrect rates for edge-case subtotals.",
+   "detail": "Category: code_regression; prior: medium.\nCited support: \"const discountCents = roundCents(subtotalCents * rate);\" (line 22); \"function roundCents(value) { return Math.floor(value); }\" (line 18) [not found in log]\n1 cited quote(s) could not be found in the log or diff.",
+   "hypothesisKey": "H2",
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "model",
+    "ref": "nvidia/Nemotron-3_5-Lightning"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpnogc0f42a6c",
+   "seq": 6,
+   "createdAt": "2026-10-16T03:55:15.616Z"
+  },
+  {
+   "kind": "model_hypothesis",
+   "title": "H3: Tax.js `Object.freeze` and `hasOwnProperty` change introduced a module loading side-effect that corrupts the discounts module scope.",
+   "detail": "Category: infrastructure; prior: low.\nCited support: \"const RATES = Object.freeze({ CA: 0.0725, NY: 0.04, TX: 0.0625 });\" (line 13); \"const rate = Object.prototype.hasOwnProperty.call(RATES, state) ? RATES[state] : 0;\" (line 16)",
+   "hypothesisKey": "H3",
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "model",
+    "ref": "nvidia/Nemotron-3_5-Lightning"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpnoh31d176f3",
+   "seq": 7,
+   "createdAt": "2026-10-16T03:55:15.617Z"
+  },
+  {
+   "kind": "experiment_result",
+   "title": "Reproduce the failure @ bf9572720abd: 1/1 run failed",
+   "detail": "1/1 run failed \u2014 failing: discountRate applies 10% at exactly the $100.00 threshold; discountRate applies 15% from $250\nCommand: node node_modules/jest/bin/jest.js --ci --json --outputFile=/work/.alibi/result-exp_mvafpnqj01f7d577-1.json --runTestsByPath test/discounts.test.js",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafpnqj01f7d577",
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "experiment",
+    "ref": "exp_mvafpnqj01f7d577"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpq82785674d8",
+   "seq": 8,
+   "createdAt": "2026-10-16T03:55:18.914Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Supports H1",
+   "detail": "The failure reproduced in a clean sandbox at the failing commit.",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafpnqj01f7d577",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpq8302f6f6c1",
+   "seq": 9,
+   "createdAt": "2026-10-16T03:55:18.915Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Supports H2",
+   "detail": "The failure reproduced in a clean sandbox at the failing commit.",
+   "hypothesisKey": "H2",
+   "experimentId": "exp_mvafpnqj01f7d577",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpq83cae10ced",
+   "seq": 10,
+   "createdAt": "2026-10-16T03:55:18.915Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Contradicts H3",
+   "detail": "The failure reproduced offline in a clean sandbox, away from the original CI infrastructure.",
+   "hypothesisKey": "H3",
+   "experimentId": "exp_mvafpnqj01f7d577",
+   "sourceId": null,
+   "effect": "contradicts",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpq83fe32c4a4",
+   "seq": 11,
+   "createdAt": "2026-10-16T03:55:18.915Z"
+  },
+  {
+   "kind": "experiment_result",
+   "title": "Run the failing test 10\u00d7 with varied seeds @ bf9572720abd: 10/10 runs failed",
+   "detail": "10/10 runs failed \u2014 failing: discountRate applies 10% at exactly the $100.00 threshold; discountRate applies 15% from $250 (observed failure rate 100%, 95% CI 72\u2013100%)\nCommand: node node_modules/jest/bin/jest.js --ci --json --outputFile=/work/.alibi/result-exp_mvafpnqjcf023574-10.json --seed=655370 --runTestsByPath test/discounts.test.js",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafpnqjcf023574",
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "experiment",
+    "ref": "exp_mvafpnqjcf023574"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpwwd6336c3cc",
+   "seq": 12,
+   "createdAt": "2026-10-16T03:55:27.565Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Supports H1",
+   "detail": "Failed deterministically: 10/10 runs.",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafpnqjcf023574",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpwwe7f41879b",
+   "seq": 13,
+   "createdAt": "2026-10-16T03:55:27.566Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Supports H2",
+   "detail": "Failed deterministically: 10/10 runs.",
+   "hypothesisKey": "H2",
+   "experimentId": "exp_mvafpnqjcf023574",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafpwwe15dfe7a5",
+   "seq": 14,
+   "createdAt": "2026-10-16T03:55:27.566Z"
+  },
+  {
+   "kind": "experiment_result",
+   "title": "Compare against the parent commit @ e737f84129fa: 0/3 runs failed (observed failure rate 0%, 95% CI 0\u201356%)",
+   "detail": "0/3 runs failed (observed failure rate 0%, 95% CI 0\u201356%)\nCommand: node node_modules/jest/bin/jest.js --ci --json --outputFile=/work/.alibi/result-exp_mvafpnqjd6b637ff-3.json --seed=131074 --runTestsByPath test/discounts.test.js",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafpnqjd6b637ff",
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "experiment",
+    "ref": "exp_mvafpnqjd6b637ff"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafq0lvaf4c891b",
+   "seq": 15,
+   "createdAt": "2026-10-16T03:55:32.371Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Supports H1",
+   "detail": "The parent commit passed 3/3 runs of the same selection.",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafpnqjd6b637ff",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafq0lva68bc2cc",
+   "seq": 16,
+   "createdAt": "2026-10-16T03:55:32.371Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Supports H2",
+   "detail": "The parent commit passed 3/3 runs of the same selection.",
+   "hypothesisKey": "H2",
+   "experimentId": "exp_mvafpnqjd6b637ff",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafq0lv5bc743be",
+   "seq": 17,
+   "createdAt": "2026-10-16T03:55:32.371Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Alibi - Cyber Forensics | Tactical Equipment",
+   "detail": "Alibi is a solution provider in Cyber Forensics and Cyber Intelligence in India, trusted by government bodies and leading law enforcement agencies. With strong partnerships with the world\u2019s top brands, Alibi delivers advanced solutions and investigative support to law enforcement as well as private enterprises.\n\n## SOLUTIONS OFFERED ---\n\n#### Forensic & Ballistic Products\n\n#### Cyber Intelligence\n\n\nQuery: \"alibi CI forensics discount tier operator regression\"",
+   "hypothesisKey": "H3",
+   "experimentId": "exp_mvafpnqje921e13c",
+   "sourceId": "src_mvafq2g5ddb88164",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://alibiglobal.in",
+    "ref": "f645f660-2827-40bc-84b8-a73fd142a9a6"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafq2g5fd2b430a",
+   "seq": 18,
+   "createdAt": "2026-10-16T03:55:34.757Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Alibi Global's Success: Scaling Cyber Forensics Nationwide ...",
+   "detail": "Meet Shyam KM, Business Director of Alibi Global, a Kerala-based startup transforming cyber forensics with innovative tools and services.\n\nQuery: \"alibi CI forensics discount tier operator regression\"",
+   "hypothesisKey": "H3",
+   "experimentId": "exp_mvafpnqje921e13c",
+   "sourceId": "src_mvafq2g69d85a451",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://www.youtube.com/watch?v=kryogNuYzEk&xstg=CAMSBhUDzO3xHw%3D%3D",
+    "ref": "f645f660-2827-40bc-84b8-a73fd142a9a6"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafq2g6d5ff90a4",
+   "seq": 19,
+   "createdAt": "2026-10-16T03:55:34.758Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Solve Cloud Forensics at Scale",
+   "detail": "Leverage automation to ensure incident data is captured and preserved before it disappears. Automatically collect key data sources and memory from individual processes for forensic analysis.\n\nParallel collection and processing\n\nCapture more data in less time, resulting in deep forensic insight delivered in minutes, not days.\n\n## Full attack timelines in minutes, not hours\n\nTimelines enriched with \n\nQuery: \"alibi CI forensics discount tier operator regression\"",
+   "hypothesisKey": "H3",
+   "experimentId": "exp_mvafpnqje921e13c",
+   "sourceId": "src_mvafq2g64e90012c",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://www.darktrace.com/forensic-acquisition-investigation",
+    "ref": "f645f660-2827-40bc-84b8-a73fd142a9a6"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafq2g654cb9a6d",
+   "seq": 20,
+   "createdAt": "2026-10-16T03:55:34.758Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "From Alert to Evidence: Evaluating AI Agents for Cyber Forensic Triage | SANS Institute",
+   "detail": "Learn More\n\nGet Your Questions AnsweredJoin a free online info session to see which program is right for you.\n\nLearn More [...] Info Sessions\n\nJoin us for a free online info session to learn more.Resources for Veterans\n\nLearn how to get the most from your Veterans Education Benefits.Women in Cybersecurity\n\nEmpowering women to thrive in cybersecurity.\n\nGet Your Questions AnsweredJoin a free online \n\nQuery: \"alibi CI forensics discount tier operator regression\"",
+   "hypothesisKey": "H3",
+   "experimentId": "exp_mvafpnqje921e13c",
+   "sourceId": "src_mvafq2g675430f9f",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://www.sans.edu/cyber-research/from-alert-evidence-evaluating-ai-agents-cyber-forensic-triage",
+    "ref": "f645f660-2827-40bc-84b8-a73fd142a9a6"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafq2g68411a484",
+   "seq": 21,
+   "createdAt": "2026-10-16T03:55:34.758Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Configuring code coverage in Jest, the right way",
+   "detail": "How to enforce such a threshold in a way that a pipeline in CI fails, or our local test fails if we do not meet the desired coverage requirements? In Jest we can configure `coverageThreshold`.\n\nFor example, suppose we want our tests to always fail if we don't reach at least a 90% of lines coverage. We can configure `coverageThreshold` as follows, in `package.json`:\n\n```\n{\"jest\":{\"collectCoverage\":\n\nQuery: \"jest test discountRate threshold > vs >=\"",
+   "hypothesisKey": "H3",
+   "experimentId": "exp_mvafpnqje921e13c",
+   "sourceId": "src_mvafq4d11aadc44d",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://www.valentinog.com/blog/jest-coverage",
+    "ref": "2cc38031-8ac0-499a-ad9b-7cbd367423f9"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafq4d10f996cc0",
+   "seq": 22,
+   "createdAt": "2026-10-16T03:55:37.237Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Vitest vs Jest",
+   "detail": "- even for large applications. [...] ```\n\ntest(\"Checkout link renders correctly\", () => {\n\nconst tree = renderer\n\n.create(<Link page=\" to checkoutLink>)\n\n.toJSON();\n\nexpect(tree).toMatchSnapshot();\n\n});\n\n```\n\nThe `test` method runs a test. The Jest `expect` API provides modifier and matcher (assertion) methods that simplify checking whether a value is what you expect it to be. Among the matcher me\n\nQuery: \"jest test discountRate threshold > vs >=\"",
+   "hypothesisKey": "H3",
+   "experimentId": "exp_mvafpnqje921e13c",
+   "sourceId": "src_mvafq4d1ab214146",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://www.speakeasy.com/blog/vitest-vs-jest",
+    "ref": "2cc38031-8ac0-499a-ad9b-7cbd367423f9"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafq4d10d63ebc7",
+   "seq": 23,
+   "createdAt": "2026-10-16T03:55:37.237Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Jest Code Coverage: Branches, Lines, Functions and Thresholds",
+   "detail": "[1:01] it's important to note that this code is checking  that both outcomes are being tested. For example,   in the case where an if statement is true and also  when it's false. The next one that we have here is  \n[1:11] function. And this measures the percentage of  functions or methods that have been called at   least once during our test execution. Next up we  have statements. And this measure\n\nQuery: \"jest test discountRate threshold > vs >=\"",
+   "hypothesisKey": "H3",
+   "experimentId": "exp_mvafpnqje921e13c",
+   "sourceId": "src_mvafq4d246d600d5",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://www.youtube.com/watch?v=Kf0OCNmoIeA&vl=en-US&xstg=CAMSBhUDzO3xHw%3D%3D",
+    "ref": "2cc38031-8ac0-499a-ad9b-7cbd367423f9"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafq4d2e790ca66",
+   "seq": 24,
+   "createdAt": "2026-10-16T03:55:37.238Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Jest testing: Top features and how to use them - LogRocket Blog",
+   "detail": "Some examples:\n\nAdd coverage when invoking Jest to get coverage reports from your tests with the ability to choose between a few built-in reporters or custom ones. You can even set a coverage threshold so your tests (and your CI) fails if that threshold is not met. This is perfect for keeping up a good test coverage in your code. [...] ```\nassert.js:83 throw new AssertionError(obj); ^ AssertionErr\n\nQuery: \"jest test discountRate threshold > vs >=\"",
+   "hypothesisKey": "H3",
+   "experimentId": "exp_mvafpnqje921e13c",
+   "sourceId": "src_mvafq4d2c5d6b6bb",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://blog.logrocket.com/jest-testing-top-features",
+    "ref": "2cc38031-8ac0-499a-ad9b-7cbd367423f9"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafq4d2beaa7219",
+   "seq": 25,
+   "createdAt": "2026-10-16T03:55:37.238Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Verdict after experiments: probable \u2014 code regression",
+   "detail": "Discount logic uses strict greater-than instead of greater-or-equal, causing exact thresholds ($100, $250) to skip intended tiers.\n\nAlibi policy: \"Confirmed\" requires strong experimental evidence; the evidence rubric rates it moderate.",
+   "hypothesisKey": "H1",
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "model",
+    "ref": "nvidia/nemotron-3-super-120b-a12b"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafq64574e6b022",
+   "seq": 26,
+   "createdAt": "2026-10-16T03:55:39.509Z"
+  },
+  {
+   "kind": "experiment_result",
+   "title": "Candidate validated: Targeted fix by Nemotron-3-Ultra-550b-a55b",
+   "detail": "Passed 3/3 targeted runs and the full regression suite.",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafq9aua6b6741d",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "experiment",
+    "ref": "exp_mvafq9aua6b6741d"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafqc718754fa29",
+   "seq": 27,
+   "createdAt": "2026-10-16T03:55:47.389Z"
+  },
+  {
+   "kind": "experiment_result",
+   "title": "Candidate validated: Revert src/discounts.js, src/tax.js to the parent commit",
+   "detail": "Passed 3/3 targeted runs and the full regression suite.",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafqee328372ff7",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "experiment",
+    "ref": "exp_mvafqee328372ff7"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafqhqm5e13eaa0",
+   "seq": 28,
+   "createdAt": "2026-10-16T03:55:54.574Z"
+  },
+  {
+   "kind": "assumption",
+   "title": "Sandbox approximates CI",
+   "detail": "Experiments ran in node:20-bookworm-slim with networking disabled, not on the original CI runner; environment-specific causes (runner image, caches, secrets, network) are not reproduced.",
+   "hypothesisKey": null,
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "policy",
+    "ref": "runner"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafqhqob5185eab",
+   "seq": 29,
+   "createdAt": "2026-10-16T03:55:54.576Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Final verdict: confirmed \u2014 code regression (strong evidence)",
+   "detail": "Evidence rubric: strong.\n\nBasis:\n\u2022 Failure reproduced in a clean sandbox at the failing commit.\n\u2022 Repeated 10\u00d7: 10 failed, 0 passed (observed 100%, 95% CI 72%\u2013100%).\n\u2022 Parent commit: 0/3 runs failed.\n\u2022 A candidate fix passed the failing selection and the regression suite (Targeted fix by Nemotron-3-Ultra-550b-a55b; Revert src/discounts.js, src/tax.js to the parent commit).\n\nRecommended action: code_patch",
+   "hypothesisKey": "H1",
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "policy",
+    "ref": "confidence rubric"
+   },
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "id": "ev_mvafqhqp59a129c5",
+   "seq": 30,
+   "createdAt": "2026-10-16T03:55:54.577Z"
+  }
+ ],
+ "sources": [
+  {
+   "id": "src_mvafq2g5ddb88164",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H3",
+   "query": "alibi CI forensics discount tier operator regression",
+   "title": "Alibi - Cyber Forensics | Tactical Equipment",
+   "url": "https://alibiglobal.in",
+   "domain": "alibiglobal.in",
+   "excerpt": "Alibi is a solution provider in Cyber Forensics and Cyber Intelligence in India, trusted by government bodies and leading law enforcement agencies. With strong partnerships with the world\u2019s top brands, Alibi delivers advanced solutions and investigative support to law enforcement as well as private enterprises.\n\n## SOLUTIONS OFFERED ---\n\n#### Forensic & Ballistic Products\n\n#### Cyber Intelligence\n\n#### Forensic & Ballistic Products [...] Alibi delivers incident response and forensic audit services to banks, insurance companies, NBFCs, hospitals, manufacturers and government agencies. Our expertise spans network forensics, digital forensic audits and incident investigations. With NABL certifi",
+   "score": 0.21658303,
+   "publishedDate": null,
+   "official": false,
+   "relevance": "Secondary source; treat as a lead.",
+   "retrievedAt": "2026-10-16T03:55:34.757Z"
+  },
+  {
+   "id": "src_mvafq2g69d85a451",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H3",
+   "query": "alibi CI forensics discount tier operator regression",
+   "title": "Alibi Global's Success: Scaling Cyber Forensics Nationwide ...",
+   "url": "https://www.youtube.com/watch?v=kryogNuYzEk&xstg=CAMSBhUDzO3xHw%3D%3D",
+   "domain": "www.youtube.com",
+   "excerpt": "Meet Shyam KM, Business Director of Alibi Global, a Kerala-based startup transforming cyber forensics with innovative tools and services.",
+   "score": 0.09048623,
+   "publishedDate": "Sat, 18 Jul 2026 03:00:00 GMT",
+   "official": false,
+   "relevance": "Secondary source; treat as a lead.",
+   "retrievedAt": "2026-10-16T03:55:34.758Z"
+  },
+  {
+   "id": "src_mvafq2g64e90012c",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H3",
+   "query": "alibi CI forensics discount tier operator regression",
+   "title": "Solve Cloud Forensics at Scale",
+   "url": "https://www.darktrace.com/forensic-acquisition-investigation",
+   "domain": "www.darktrace.com",
+   "excerpt": "Leverage automation to ensure incident data is captured and preserved before it disappears. Automatically collect key data sources and memory from individual processes for forensic analysis.\n\nParallel collection and processing\n\nCapture more data in less time, resulting in deep forensic insight delivered in minutes, not days.\n\n## Full attack timelines in minutes, not hours\n\nTimelines enriched with context to shows exactly what happened, when, and how\n\nEliminate tedious manual work [...] Take the next step\n\nGet a demo\n\n/ CLOUD\n\n/ NETWORK\n\nProactive protection\n\n/ EMAIL\n\nCloud-native Al security\n\n/ SECURE AI NEW\n\nDeploy agents confidently\n\n/ OT\n\nComprehensive OT security\n\n/ IDENTITY\n\n360\u00b0 user p",
+   "score": 0.032079544,
+   "publishedDate": "Thu, 25 Sep 2025 00:00:00 GMT",
+   "official": false,
+   "relevance": "Secondary source; treat as a lead.",
+   "retrievedAt": "2026-10-16T03:55:34.758Z"
+  },
+  {
+   "id": "src_mvafq2g675430f9f",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H3",
+   "query": "alibi CI forensics discount tier operator regression",
+   "title": "From Alert to Evidence: Evaluating AI Agents for Cyber Forensic Triage | SANS Institute",
+   "url": "https://www.sans.edu/cyber-research/from-alert-evidence-evaluating-ai-agents-cyber-forensic-triage",
+   "domain": "www.sans.edu",
+   "excerpt": "Learn More\n\nGet Your Questions AnsweredJoin a free online info session to see which program is right for you.\n\nLearn More [...] Info Sessions\n\nJoin us for a free online info session to learn more.Resources for Veterans\n\nLearn how to get the most from your Veterans Education Benefits.Women in Cybersecurity\n\nEmpowering women to thrive in cybersecurity.\n\nGet Your Questions AnsweredJoin a free online info session to see which program is right for you.\n\nRegister today\n\n Research Overview\n\n  Learn how SANS.edu research is strengthening the field of cybersecurity.\n Cybersecurity Research Papers [...] + International StudentsInternational Students\n  + Course WaiversCourse Waivers\n  + Bachelor's Tran",
+   "score": 0.024914194,
+   "publishedDate": null,
+   "official": false,
+   "relevance": "Secondary source; treat as a lead.",
+   "retrievedAt": "2026-10-16T03:55:34.758Z"
+  },
+  {
+   "id": "src_mvafq4d11aadc44d",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H3",
+   "query": "jest test discountRate threshold > vs >=",
+   "title": "Configuring code coverage in Jest, the right way",
+   "url": "https://www.valentinog.com/blog/jest-coverage",
+   "domain": "www.valentinog.com",
+   "excerpt": "How to enforce such a threshold in a way that a pipeline in CI fails, or our local test fails if we do not meet the desired coverage requirements? In Jest we can configure `coverageThreshold`.\n\nFor example, suppose we want our tests to always fail if we don't reach at least a 90% of lines coverage. We can configure `coverageThreshold` as follows, in `package.json`:\n\n```\n{\"jest\":{\"collectCoverage\": true, \"collectCoverageFrom\":[\"./src/\"], \"coverageThreshold\":{\"global\":{\"lines\": 90}}}}\n``` [...] By running `npm test` with this configuration in place we should see the following error:\n\n```\nJest: \"global\" coverage threshold for lines (90%) not met: 50%\n```\n\nAgain, I'm not suggesting 90% or 100% c",
+   "score": 0.13689686,
+   "publishedDate": "Wed, 03 Nov 2021 16:29:52 GMT",
+   "official": false,
+   "relevance": "Secondary source; treat as a lead.",
+   "retrievedAt": "2026-10-16T03:55:37.237Z"
+  },
+  {
+   "id": "src_mvafq4d1ab214146",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H3",
+   "query": "jest test discountRate threshold > vs >=",
+   "title": "Vitest vs Jest",
+   "url": "https://www.speakeasy.com/blog/vitest-vs-jest",
+   "domain": "www.speakeasy.com",
+   "excerpt": "- even for large applications. [...] ```\n\ntest(\"Checkout link renders correctly\", () => {\n\nconst tree = renderer\n\n.create(<Link page=\" to checkoutLink>)\n\n.toJSON();\n\nexpect(tree).toMatchSnapshot();\n\n});\n\n```\n\nThe `test` method runs a test. The Jest `expect` API provides modifier and matcher (assertion) methods that simplify checking whether a value is what you expect it to be. Among the matcher methods available are:\n\n `toBe()`\n `toHaveProperty()`\n `toMatchSnapshot()` [...] ## Jest features\n\nJest\u2019s popularity is in part thanks to the extensive Jest API that handles a variety of testing needs, including snapshots, mocking, and code coverage, making it suitable for most unit testing situations",
+   "score": 0.13293073,
+   "publishedDate": "Mon, 30 Sep 2024 00:00:00 GMT",
+   "official": false,
+   "relevance": "Secondary source; treat as a lead.",
+   "retrievedAt": "2026-10-16T03:55:37.237Z"
+  },
+  {
+   "id": "src_mvafq4d246d600d5",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H3",
+   "query": "jest test discountRate threshold > vs >=",
+   "title": "Jest Code Coverage: Branches, Lines, Functions and Thresholds",
+   "url": "https://www.youtube.com/watch?v=Kf0OCNmoIeA&vl=en-US&xstg=CAMSBhUDzO3xHw%3D%3D",
+   "domain": "www.youtube.com",
+   "excerpt": "[1:01] it's important to note that this code is checking  that both outcomes are being tested. For example,   in the case where an if statement is true and also  when it's false. The next one that we have here is  \n[1:11] function. And this measures the percentage of  functions or methods that have been called at   least once during our test execution. Next up we  have statements. And this measures the percentage [...] [2:53] coverage right away. As you begin to build your  test suite, you're going to want to start with a   lower number and build that app as you see fit. So  in our case, we're going to say that we want 80%  \n[3:03] test coverage across the board. So let's go ahead  and do th",
+   "score": 0.12709928,
+   "publishedDate": "Mon, 02 Mar 2026 00:00:00 GMT",
+   "official": false,
+   "relevance": "Secondary source; treat as a lead.",
+   "retrievedAt": "2026-10-16T03:55:37.238Z"
+  },
+  {
+   "id": "src_mvafq4d2c5d6b6bb",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "hypothesisKey": "H3",
+   "query": "jest test discountRate threshold > vs >=",
+   "title": "Jest testing: Top features and how to use them - LogRocket Blog",
+   "url": "https://blog.logrocket.com/jest-testing-top-features",
+   "domain": "blog.logrocket.com",
+   "excerpt": "Some examples:\n\nAdd coverage when invoking Jest to get coverage reports from your tests with the ability to choose between a few built-in reporters or custom ones. You can even set a coverage threshold so your tests (and your CI) fails if that threshold is not met. This is perfect for keeping up a good test coverage in your code. [...] ```\nassert.js:83 throw new AssertionError(obj); ^ AssertionError [ERR_ASSERTION]: { user: { firstName: 'Ada', lastName: 'Lovelace!', email: '[email protected]' } } deepEqual { user: { firstName: 'Ada', lastName: 'Lovelace', email: '[email protected]' } } \n```\n\nIf the function you are testing returns something random (for example, when you generate a random API",
+   "score": 0.12337643,
+   "publishedDate": "Mon, 30 May 2022 14:30:24 GMT",
+   "official": false,
+   "relevance": "Secondary source; treat as a lead.",
+   "retrievedAt": "2026-10-16T03:55:37.238Z"
+  }
+ ],
+ "patches": [
+  {
+   "id": "patch_mvafq7f2bdb90ceb",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "origin": "model",
+   "strategy": "code_patch",
+   "title": "Targeted fix by Nemotron-3-Ultra-550b-a55b",
+   "rationale": "The root cause is the operator regression in discountRate: the condition changed from `>=` to `>` in the tier qualification logic. This causes exact threshold amounts (10000, 25000, 50000 cents) to fall through to the default rate 0. The fix is to change the comparison back to `>=` so that orders meeting the exact threshold qualify for the tier.",
+   "diff": "diff --git a/src/discounts.js b/src/discounts.js\nindex 3aaa7ed..e268867 100644\n--- a/src/discounts.js\n+++ b/src/discounts.js\n@@ -9,7 +9,7 @@ const TIERS = [\n ];\n \n function discountRate(subtotalCents) {\n-  const tier = TIERS.find((t) => subtotalCents > t.minCents);\n+  const tier = TIERS.find((t) => subtotalCents >= t.minCents);\n   return tier ? tier.rate : 0;\n }\n \n",
+   "files": [
+    "src/discounts.js"
+   ],
+   "status": "validated",
+   "validation": {
+    "targetedExperimentId": "exp_mvafq9aua6b6741d",
+    "suiteExperimentId": "exp_mvafqbf5b220841a",
+    "summary": "Passed 3/3 targeted runs and the full regression suite."
+   },
+   "prUrl": null,
+   "prBranch": null,
+   "createdAt": "2026-10-16T03:55:41.198Z"
+  },
+  {
+   "id": "patch_mvafqcgy61bf1850",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "origin": "deterministic",
+   "strategy": "code_patch",
+   "title": "Revert src/discounts.js, src/tax.js to the parent commit",
+   "rationale": "Restores the last known-good version of the source files changed by the failing commit. Broad but safe; prefer a targeted fix when one validates.",
+   "diff": "diff --git a/src/discounts.js b/src/discounts.js\nindex 3aaa7ed..91b0fa3 100644\n--- a/src/discounts.js\n+++ b/src/discounts.js\n@@ -1,7 +1,7 @@\n 'use strict';\n \n-// Volume discount tiers, highest first. An order qualifies for a tier when its\n-// subtotal exceeds `minCents`.\n+// Volume discount tiers. An order qualifies for a tier when its subtotal is at\n+// least `minCents`.\n const TIERS = [\n   { minCents: 50000, rate: 0.2 },\n   { minCents: 25000, rate: 0.15 },\n@@ -9,17 +9,15 @@ const TIERS = [\n ];\n \n function discountRate(subtotalCents) {\n-  const tier = TIERS.find((t) => subtotalCents > t.minCents);\n-  return tier ? tier.rate : 0;\n-}\n-\n-function roundCents(value) {\n-  return Math.floor(value);\n+  for (const tier of TIERS) {\n+    if (subtotalCents >= tier.minCents) return tier.rate;\n+  }\n+  return 0;\n }\n \n function applyDiscount(subtotalCents) {\n   const rate = discountRate(subtotalCents);\n-  const discountCents = roundCents(subtotalCents * rate);\n+  const discountCents = Math.floor(subtotalCents * rate);\n   return { rate, discountCents, totalCents: subtotalCents - discountCents };\n }\n \ndiff --git a/src/tax.js b/src/tax.js\nindex 69fa225..20c6b20 100644\n--- a/src/tax.js\n+++ b/src/tax.js\n@@ -1,9 +1,9 @@\n 'use strict';\n \n-const RATES = Object.freeze({ CA: 0.0725, NY: 0.04, TX: 0.0625 });\n+const RATES = { CA: 0.0725, NY: 0.04, TX: 0.0625 };\n \n function salesTax(amountCents, state) {\n-  const rate = Object.prototype.hasOwnProperty.call(RATES, state) ? RATES[state] : 0;\n+  const rate = RATES[state] ?? 0;\n   return Math.round(amountCents * rate);\n }\n \n",
+   "files": [
+    "src/discounts.js",
+    "src/tax.js"
+   ],
+   "status": "validated",
+   "validation": {
+    "targetedExperimentId": "exp_mvafqee328372ff7",
+    "suiteExperimentId": "exp_mvafqgz40b3262c7",
+    "summary": "Passed 3/3 targeted runs and the full regression suite."
+   },
+   "prUrl": null,
+   "prBranch": null,
+   "createdAt": "2026-10-16T03:55:47.746Z"
+  }
+ ],
+ "modelCalls": [
+  {
+   "id": "mc_mvafpnoe40bbaf75",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "step": "triage",
+   "role": "triage",
+   "model": "nvidia/Nemotron-3_5-Lightning",
+   "status": "ok",
+   "startedAt": "2026-10-16T03:55:12.314Z",
+   "durationMs": 2825,
+   "inputChars": 5962,
+   "promptTokens": 1962,
+   "completionTokens": 655,
+   "attempts": 1,
+   "error": null
+  },
+  {
+   "id": "mc_mvafq644f3d77a68",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "step": "verdict",
+   "role": "reasoning",
+   "model": "nvidia/nemotron-3-super-120b-a12b",
+   "status": "ok",
+   "startedAt": "2026-10-16T03:55:37.239Z",
+   "durationMs": 2269,
+   "inputChars": 7565,
+   "promptTokens": 2218,
+   "completionTokens": 231,
+   "attempts": 1,
+   "error": null
+  },
+  {
+   "id": "mc_mvafq73p818099a9",
+   "investigationId": "inv_mvafpl2qc5b70829",
+   "step": "patch",
+   "role": "deep",
+   "model": "nvidia/Nemotron-3-Ultra-550b-a55b",
+   "status": "ok",
+   "startedAt": "2026-10-16T03:55:39.511Z",
+   "durationMs": 1278,
+   "inputChars": 6349,
+   "promptTokens": 2459,
+   "completionTokens": 388,
+   "attempts": 1,
+   "error": null
+  }
+ ],
+ "queuePosition": -1
+}

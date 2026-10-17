@@ -1,0 +1,1478 @@
+{
+ "investigation": {
+  "id": "inv_mvafugsd9090b5d1",
+  "createdAt": "2026-10-16T03:58:59.964Z",
+  "updatedAt": "2026-10-16T03:59:50.049Z",
+  "status": "completed",
+  "stage": "Complete",
+  "scenarioId": "maven-dependency",
+  "mode": "live",
+  "repoUrl": null,
+  "parentSha": "3b1e09cfb847bcf597c0d09b97d04c5d02c032de",
+  "branch": "main",
+  "workflow": "CI",
+  "job": "build (temurin 17)",
+  "runId": null,
+  "runUrl": null,
+  "prNumber": null,
+  "prUrl": null,
+  "commitMessage": "build(deps): bump com.google.guava:guava from 20.0 to 21.0",
+  "commitAuthor": "dependabot[bot]",
+  "framework": "maven",
+  "failureSignature": "maven: compilation error at InventoryItem.java:50 \u2014 cannot find symbol, symbol method toStringHelper(com.example.inventory.InventoryItem), in class com.google.common.base.Objects",
+  "classification": "dependency_regression",
+  "summary": "The upgrade to Guava 21.0 removed the deprecated toStringHelper method from com.google.common.base.Objects, causing a compilation failure in InventoryItem.java. The parent commit builds successfully, confirming the regression is due to the dependency change.",
+  "verdict": "confirmed",
+  "confidence": {
+   "label": "strong",
+   "basis": [
+    "Failure reproduced in a clean sandbox at the failing commit.",
+    "Parent commit: 0/1 runs failed.",
+    "The failing commit changes a dependency version.",
+    "A candidate fix passed the failing selection and the regression suite (Pin guava back to 20.0).",
+    "8 external source(s) are consistent with this cause (treated as leads, not proof)."
+   ]
+  },
+  "primaryHypothesis": "H1",
+  "recommendedAction": "Replace com.google.common.base.Objects.toStringHelper(...) with com.google.common.base.MoreObjects.toStringHelper(...) in InventoryItem.java.",
+  "remediationType": "dependency_pin",
+  "limitations": [
+   "Before fix validation: The fix assumes the source change is isolated; other uses of removed Guava 21.0 APIs may exist but were not observed in this build.",
+   "Fix validation: 1 of 2 candidates validated (Pin guava back to 20.0); 1 failed validation (Targeted fix by Nemotron-3-Ultra-550b-a55b)."
+  ],
+  "error": null,
+  "logStats": {
+   "totalLines": 279,
+   "totalChars": 41701,
+   "sentChars": 2221,
+   "excerptCount": 1,
+   "redactions": 0
+  },
+  "modelsUsed": {
+   "triage": "nvidia/Nemotron-3_5-Lightning",
+   "verdict": "nvidia/nemotron-3-super-120b-a12b",
+   "patch": "nvidia/Nemotron-3-Ultra-550b-a55b"
+  },
+  "verdictHistory": [
+   {
+    "at": "2026-10-16T03:59:03.865Z",
+    "stage": "Hypotheses formed",
+    "verdict": null,
+    "confidence": "none",
+    "note": "4 competing hypotheses; no experiment has run yet."
+   },
+   {
+    "at": "2026-10-16T03:59:23.883Z",
+    "stage": "Experiments weighed",
+    "verdict": "probable",
+    "confidence": "moderate",
+    "note": "Observed \u2014 reproduction 1/1 failed; parent commit 0/1 failed. Evidence rubric: moderate. \"Confirmed\" requires strong experimental evidence; the evidence rubric rates it moderate."
+   },
+   {
+    "at": "2026-10-16T03:59:50.049Z",
+    "stage": "Remediation tested",
+    "verdict": "confirmed",
+    "confidence": "strong",
+    "note": "Evidence rubric: strong."
+   }
+  ],
+  "options": {
+   "repeat": 10,
+   "requestedMode": "live"
+  },
+  "artifacts": [],
+  "source": "demo",
+  "repository": "alibi-demo/inventory-api",
+  "commitSha": "89c36cf227a2132c19e5b6f7104a6cfd561d3984"
+ },
+ "hypotheses": [
+  {
+   "id": "hyp_mvafujsld6b975bf",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "key": "H1",
+   "cause": "Guava 21.0 removed deprecated toStringHelper method",
+   "category": "dependency_regression",
+   "origin": "model",
+   "supporting": [
+    {
+     "text": "[ERROR] /work/src/main/java/com/example/inventory/InventoryItem.java:[50,23] cannot find symbol\n  symbol:   method toStringHelper(com.example.inventory.InventoryItem)\n  location: class com.google.common.base.Objects",
+     "logLine": 251,
+     "verified": false
+    },
+    {
+     "text": "dependency changes: [{\"ecosystem\":\"maven\",\"name\":\"guava\",\"from\":\"20.0\",\"to\":\"21.0\",\"file\":\"pom.xml\",\"removedLine\":\"    <guava.version>20.0</guava.version>\",\"addedLine\":\"    <guava.version>21.0</guava.version>\"}]",
+     "logLine": 1,
+     "verified": false
+    },
+    {
+     "text": "commit message: build(deps): bump com.google.guava:guava from 20.0 to 21.0",
+     "logLine": 1,
+     "verified": false
+    }
+   ],
+   "contradicting": [],
+   "prior": "high",
+   "status": "supported",
+   "assessment": "Supported by reproduction failure at the upgraded commit and success at the parent commit, forming a discriminating experiment.",
+   "nextExperiment": "compare_parent",
+   "rank": 0,
+   "requested": [
+    "compare_parent",
+    "reproduce"
+   ]
+  },
+  {
+   "id": "hyp_mvafujsmbbc4ca65",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "key": "H2",
+   "cause": "InventoryItem.java source code references removed API that was previously tolerated or compiled via transitive dependency shading",
+   "category": "code_regression",
+   "origin": "model",
+   "supporting": [
+    {
+     "text": "[ERROR] /work/src/main/java/com/example/inventory/InventoryItem.java:[50,23] cannot find symbol\n  symbol:   method toStringHelper(com.example.inventory.InventoryItem)\n  location: class com.google.common.base.Objects",
+     "logLine": 251,
+     "verified": false
+    }
+   ],
+   "contradicting": [
+    {
+     "text": "commit message: build(deps): bump com.google.guava:guava from 20.0 to 21.0",
+     "logLine": 1,
+     "verified": false
+    }
+   ],
+   "prior": "medium",
+   "status": "refuted",
+   "assessment": "Contradicted by the parent commit passing despite identical source code, proving the source alone is not the cause.",
+   "nextExperiment": "compare_parent",
+   "rank": 1,
+   "requested": [
+    "reproduce",
+    "compare_parent"
+   ]
+  },
+  {
+   "id": "hyp_mvafujsn64cbcec0",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "key": "H3",
+   "cause": "Maven compiler plugin configuration or Java 17 compatibility issue masking the real problem",
+   "category": "infrastructure",
+   "origin": "model",
+   "supporting": [
+    {
+     "text": "[INFO] Compiling 2 source files with javac [debug release 17] to target/classes",
+     "logLine": 252,
+     "verified": true
+    },
+    {
+     "text": "[ERROR] -> [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException",
+     "logLine": 260,
+     "verified": false
+    }
+   ],
+   "contradicting": [],
+   "prior": "low",
+   "status": "inconclusive",
+   "assessment": "No evidence of compiler misconfiguration; the error is a clear symbol absence consistent with API removal.",
+   "nextExperiment": "compare_parent",
+   "rank": 2,
+   "requested": [
+    "compare_parent",
+    "reproduce"
+   ]
+  },
+  {
+   "id": "hyp_mvafujsn85388db0",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "key": "H4",
+   "cause": "Transitive dependency conflict where another library pulls in Guava 21.0 and overrides the explicit 20.0 version, causing API mismatch",
+   "category": "dependency_regression",
+   "origin": "model",
+   "supporting": [],
+   "contradicting": [
+    {
+     "text": "resolvedArtifacts includes {group: \"com.google.guava\", artifact: \"guava\", version: \"21.0\"}",
+     "logLine": 1,
+     "verified": false
+    }
+   ],
+   "prior": "low",
+   "status": "refuted",
+   "assessment": "Contradicted by resolved artifacts showing Guava 21.0 is correctly resolved, ruling out a version override conflict.",
+   "nextExperiment": "external_search",
+   "rank": 3,
+   "requested": [
+    "external_search"
+   ]
+  }
+ ],
+ "experiments": [
+  {
+   "id": "exp_mvafujvlfb63750d",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "kind": "reproduce",
+   "title": "Reproduce the failure",
+   "reason": "Re-run full build and test suite at the failing commit in a clean, offline sandbox.",
+   "status": "failed",
+   "backend": "docker",
+   "command": [
+    "mvn",
+    "-B",
+    "-o",
+    "-Dmaven.repo.local=/cache/m2",
+    "test"
+   ],
+   "environment": {
+    "backend": "docker",
+    "image": "maven:3.9-eclipse-temurin-17",
+    "network": "none",
+    "user": "1000:1000",
+    "cpus": "1.5",
+    "memory": "1536m",
+    "readOnlyRoot": true,
+    "capabilities": "all dropped",
+    "timeoutSec": 180,
+    "dependencyInstall": [
+     {
+      "exitCode": 0,
+      "durationMs": 2415,
+      "network": "bridge (install only)"
+     },
+     {
+      "exitCode": 0,
+      "durationMs": 2059,
+      "network": "bridge (install only)"
+     }
+    ]
+   },
+   "commitSha": "89c36cf227a2132c19e5b6f7104a6cfd561d3984",
+   "testSelection": "full build and test suite",
+   "plannedAttempts": 1,
+   "startedAt": "2026-10-16T03:59:08.669Z",
+   "finishedAt": "2026-10-16T03:59:10.427Z",
+   "durationMs": 1758,
+   "result": {
+    "attempts": [
+     {
+      "index": 1,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 1756,
+      "tests": null,
+      "outputTail": "main/java/com/example/inventory/InventoryItem.java:[50,23] cannot find symbol\n[ERROR]   symbol:   method toStringHelper(com.example.inventory.InventoryItem)\n[ERROR]   location: class com.google.common.base.Objects\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n"
+     }
+    ],
+    "passes": 0,
+    "failures": 1
+   },
+   "observation": "1/1 run failed (build failed before tests ran)",
+   "effect": "Supports H1: The failure reproduced in a clean sandbox at the failing commit.\nSupports H2: The failure reproduced in a clean sandbox at the failing commit.\nContradicts H3: The failure reproduced offline in a clean sandbox, away from the original CI infrastructure.\nSupports H4: The failure reproduced in a clean sandbox at the failing commit.",
+   "patchId": null
+  },
+  {
+   "id": "exp_mvafujvl8b0347ae",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": null,
+   "kind": "repeat",
+   "title": "Repeat runs",
+   "reason": "Skipped: a compilation error is deterministic; repeating cannot change the outcome.",
+   "status": "skipped",
+   "backend": "none",
+   "command": null,
+   "environment": null,
+   "commitSha": "89c36cf227a2132c19e5b6f7104a6cfd561d3984",
+   "testSelection": "full build and test suite",
+   "plannedAttempts": 0,
+   "startedAt": null,
+   "finishedAt": null,
+   "durationMs": null,
+   "result": null,
+   "observation": "Skipped: a compilation error is deterministic; repeating cannot change the outcome.",
+   "effect": null,
+   "patchId": null
+  },
+  {
+   "id": "exp_mvafujvl15a54eac",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "kind": "compare_parent",
+   "title": "Compare against the parent commit",
+   "reason": "Runs the same selection at the parent 3b1e09cfb847. If the parent passes, the failing commit introduced the failure.",
+   "status": "passed",
+   "backend": "docker",
+   "command": [
+    "mvn",
+    "-B",
+    "-o",
+    "-Dmaven.repo.local=/cache/m2",
+    "test"
+   ],
+   "environment": {
+    "backend": "docker",
+    "image": "maven:3.9-eclipse-temurin-17",
+    "network": "none",
+    "user": "1000:1000",
+    "cpus": "1.5",
+    "memory": "1536m",
+    "readOnlyRoot": true,
+    "capabilities": "all dropped",
+    "timeoutSec": 180,
+    "dependencyInstall": [
+     {
+      "exitCode": 0,
+      "durationMs": 2031,
+      "network": "bridge (install only)"
+     },
+     {
+      "exitCode": 0,
+      "durationMs": 1914,
+      "network": "bridge (install only)"
+     }
+    ]
+   },
+   "commitSha": "3b1e09cfb847bcf597c0d09b97d04c5d02c032de",
+   "testSelection": "full build and test suite",
+   "plannedAttempts": 1,
+   "startedAt": "2026-10-16T03:59:14.589Z",
+   "finishedAt": "2026-10-16T03:59:17.409Z",
+   "durationMs": 2820,
+   "result": {
+    "attempts": [
+     {
+      "index": 1,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 2820,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "NFO] Running com.example.inventory.StockLevelsTest\n[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.example.inventory.StockLevelsTest\n[INFO] \n[INFO] Results:\n[INFO] \n[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0\n[INFO] \n[INFO] ------------------------------------------------------------------------\n[INFO] BUILD SUCCESS\n[INFO] ------------------------------------------------------------------------\n[INFO] Total time:  1.908 s\n[INFO] Finished at: 2026-10-16T03:59:17Z\n[INFO] ------------------------------------------------------------------------\n"
+     }
+    ],
+    "passes": 1,
+    "failures": 0
+   },
+   "observation": "0/1 run failed",
+   "effect": "Supports H1: The parent commit passed 1/1 runs of the same selection.\nSupports H2: The parent commit passed 1/1 runs of the same selection.\nSupports H4: The parent commit passed 1/1 runs of the same selection.",
+   "patchId": null
+  },
+  {
+   "id": "exp_mvafujvl0bcc7121",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "kind": "external_search",
+   "title": "Search for external evidence",
+   "reason": "A hypothesis implicates an external dependency or service; search release notes, issues, and status pages for corroboration.",
+   "status": "passed",
+   "backend": "tavily",
+   "command": [
+    "tavily.search(\"guava 21.0 release notes com.google.common.base.Objects.toStringHelper removed\")",
+    "tavily.search(\"Guava 21.0 removed Objects.toStringHelper\")",
+    "tavily.search(\"Maven guava 21.0 compilation error toStringHelper deprecated\")"
+   ],
+   "environment": {
+    "backend": "tavily",
+    "endpoint": "https://api.tavily.com/search",
+    "search_depth": "basic"
+   },
+   "commitSha": null,
+   "testSelection": null,
+   "plannedAttempts": 0,
+   "startedAt": "2026-10-16T03:59:17.410Z",
+   "finishedAt": "2026-10-16T03:59:21.444Z",
+   "durationMs": 4034,
+   "result": null,
+   "observation": "3 Tavily queries returned 12 result(s), 8 from primary sources.",
+   "effect": "Search results are leads that can corroborate a hypothesis; they are not proof on their own.",
+   "patchId": null
+  },
+  {
+   "id": "exp_mvafv4vb666cc2e0",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "kind": "validate_patch",
+   "title": "Validate: Targeted fix by Nemotron-3-Ultra-550b-a55b",
+   "reason": "Runs the originally failing selection 3\u00d7 with the candidate applied to the failing commit.",
+   "status": "failed",
+   "backend": "docker",
+   "command": [
+    "mvn",
+    "-B",
+    "-o",
+    "-Dmaven.repo.local=/cache/m2",
+    "test"
+   ],
+   "environment": {
+    "backend": "docker",
+    "image": "maven:3.9-eclipse-temurin-17",
+    "network": "none",
+    "user": "1000:1000",
+    "cpus": "1.5",
+    "memory": "1536m",
+    "readOnlyRoot": true,
+    "capabilities": "all dropped",
+    "timeoutSec": 180,
+    "dependencyInstall": [
+     {
+      "exitCode": 0,
+      "durationMs": 2937,
+      "network": "bridge (install only)"
+     },
+     {
+      "exitCode": 0,
+      "durationMs": 2054,
+      "network": "bridge (install only)"
+     }
+    ]
+   },
+   "commitSha": "89c36cf227a2132c19e5b6f7104a6cfd561d3984",
+   "testSelection": "full build and test suite + patch",
+   "plannedAttempts": 3,
+   "startedAt": "2026-10-16T03:59:31.175Z",
+   "finishedAt": "2026-10-16T03:59:37.776Z",
+   "durationMs": 6601,
+   "result": {
+    "attempts": [
+     {
+      "index": 1,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 2564,
+      "tests": {
+       "total": 5,
+       "passed": 4,
+       "failed": 1,
+       "failedNames": [
+        "com.example.inventory.InventoryItemTest#rendersReadableToString"
+       ]
+      },
+      "outputTail": "failures.\n[ERROR] \n[ERROR] Please refer to /work/target/surefire-reports for the individual test results.\n[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n"
+     },
+     {
+      "index": 2,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 1938,
+      "tests": {
+       "total": 5,
+       "passed": 4,
+       "failed": 1,
+       "failedNames": [
+        "com.example.inventory.InventoryItemTest#rendersReadableToString"
+       ]
+      },
+      "outputTail": "failures.\n[ERROR] \n[ERROR] Please refer to /work/target/surefire-reports for the individual test results.\n[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n"
+     },
+     {
+      "index": 3,
+      "exitCode": 1,
+      "passed": false,
+      "timedOut": false,
+      "durationMs": 2096,
+      "tests": {
+       "total": 5,
+       "passed": 4,
+       "failed": 1,
+       "failedNames": [
+        "com.example.inventory.InventoryItemTest#rendersReadableToString"
+       ]
+      },
+      "outputTail": "failures.\n[ERROR] \n[ERROR] Please refer to /work/target/surefire-reports for the individual test results.\n[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.\n[ERROR] -> [Help 1]\n[ERROR] \n[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.\n[ERROR] Re-run Maven using the -X switch to enable full debug logging.\n[ERROR] \n[ERROR] For more information about the errors and possible solutions, please read the following articles:\n[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\n"
+     }
+    ],
+    "passes": 0,
+    "failures": 3,
+    "failureRate": {
+     "rate": 1,
+     "low": 0.43849391955098227,
+     "high": 1,
+     "n": 3
+    }
+   },
+   "observation": "3/3 runs failed \u2014 failing: com.example.inventory.InventoryItemTest#rendersReadableToString (observed failure rate 100%, 95% CI 44\u2013100%)",
+   "effect": "The candidate does not fix the failure.",
+   "patchId": "patch_mvafv0r1a241a959"
+  },
+  {
+   "id": "exp_mvafve051d1b612c",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "kind": "validate_patch",
+   "title": "Validate: Pin guava back to 20.0",
+   "reason": "Runs the originally failing selection 3\u00d7 with the candidate applied to the failing commit.",
+   "status": "passed",
+   "backend": "docker",
+   "command": [
+    "mvn",
+    "-B",
+    "-o",
+    "-Dmaven.repo.local=/cache/m2",
+    "test"
+   ],
+   "environment": {
+    "backend": "docker",
+    "image": "maven:3.9-eclipse-temurin-17",
+    "network": "none",
+    "user": "1000:1000",
+    "cpus": "1.5",
+    "memory": "1536m",
+    "readOnlyRoot": true,
+    "capabilities": "all dropped",
+    "timeoutSec": 180,
+    "dependencyInstall": [
+     {
+      "exitCode": 0,
+      "durationMs": 2772,
+      "network": "bridge (install only)"
+     },
+     {
+      "exitCode": 0,
+      "durationMs": 1761,
+      "network": "bridge (install only)"
+     }
+    ]
+   },
+   "commitSha": "89c36cf227a2132c19e5b6f7104a6cfd561d3984",
+   "testSelection": "full build and test suite + patch",
+   "plannedAttempts": 3,
+   "startedAt": "2026-10-16T03:59:43.013Z",
+   "finishedAt": "2026-10-16T03:59:50.048Z",
+   "durationMs": 7035,
+   "result": {
+    "attempts": [
+     {
+      "index": 1,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 2766,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "NFO] Running com.example.inventory.StockLevelsTest\n[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.example.inventory.StockLevelsTest\n[INFO] \n[INFO] Results:\n[INFO] \n[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0\n[INFO] \n[INFO] ------------------------------------------------------------------------\n[INFO] BUILD SUCCESS\n[INFO] ------------------------------------------------------------------------\n[INFO] Total time:  1.885 s\n[INFO] Finished at: 2026-10-16T03:59:45Z\n[INFO] ------------------------------------------------------------------------\n"
+     },
+     {
+      "index": 2,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 1917,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "NFO] Running com.example.inventory.StockLevelsTest\n[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.example.inventory.StockLevelsTest\n[INFO] \n[INFO] Results:\n[INFO] \n[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0\n[INFO] \n[INFO] ------------------------------------------------------------------------\n[INFO] BUILD SUCCESS\n[INFO] ------------------------------------------------------------------------\n[INFO] Total time:  1.058 s\n[INFO] Finished at: 2026-10-16T03:59:47Z\n[INFO] ------------------------------------------------------------------------\n"
+     },
+     {
+      "index": 3,
+      "exitCode": 0,
+      "passed": true,
+      "timedOut": false,
+      "durationMs": 2349,
+      "tests": {
+       "total": 5,
+       "passed": 5,
+       "failed": 0,
+       "failedNames": []
+      },
+      "outputTail": "NFO] Running com.example.inventory.StockLevelsTest\n[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.027 s -- in com.example.inventory.StockLevelsTest\n[INFO] \n[INFO] Results:\n[INFO] \n[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0\n[INFO] \n[INFO] ------------------------------------------------------------------------\n[INFO] BUILD SUCCESS\n[INFO] ------------------------------------------------------------------------\n[INFO] Total time:  1.449 s\n[INFO] Finished at: 2026-10-16T03:59:49Z\n[INFO] ------------------------------------------------------------------------\n"
+     }
+    ],
+    "passes": 3,
+    "failures": 0,
+    "failureRate": {
+     "rate": 0,
+     "low": 0,
+     "high": 0.5615060804490177,
+     "n": 3
+    }
+   },
+   "observation": "0/3 runs failed (observed failure rate 0%, 95% CI 0\u201356%)",
+   "effect": "The candidate makes the failing selection pass.",
+   "patchId": "patch_mvafva78705a1fe7"
+  }
+ ],
+ "evidence": [
+  {
+   "kind": "observed_fact",
+   "title": "CI log loaded from demo fixture",
+   "detail": "The CI log for this scenario was captured from a real sandboxed run of alibi-demo/inventory-api at 89c36cf227a2 and stored as a fixture (fixtures/scenarios/maven-dependency/ci-log.txt).",
+   "hypothesisKey": null,
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "fixture",
+    "ref": "fixtures/scenarios/maven-dependency/ci-log.txt"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuguz8be74c59",
+   "seq": 1,
+   "createdAt": "2026-10-16T03:59:00.059Z"
+  },
+  {
+   "kind": "observed_fact",
+   "title": "Compilation error in InventoryItem.java:50",
+   "detail": "cannot find symbol\nsymbol: method toStringHelper(com.example.inventory.InventoryItem)\nlocation: class com.google.common.base.Objects",
+   "hypothesisKey": null,
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "log",
+    "lines": [
+     256,
+     258
+    ]
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafugv559531d40",
+   "seq": 2,
+   "createdAt": "2026-10-16T03:59:00.065Z"
+  },
+  {
+   "kind": "observed_fact",
+   "title": "Commit changes 1 file(s)",
+   "detail": "pom.xml (+1/\u22121)",
+   "hypothesisKey": null,
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "git",
+    "ref": "3b1e09cfb847..89c36cf227a2"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafugv53d060ba4",
+   "seq": 3,
+   "createdAt": "2026-10-16T03:59:00.066Z"
+  },
+  {
+   "kind": "observed_fact",
+   "title": "Dependency change: guava 20.0 \u2192 21.0",
+   "detail": "pom.xml\n- <guava.version>20.0</guava.version>\n+ <guava.version>21.0</guava.version>",
+   "hypothesisKey": null,
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "git",
+    "ref": "pom.xml"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafugv6e3665e76",
+   "seq": 4,
+   "createdAt": "2026-10-16T03:59:00.066Z"
+  },
+  {
+   "kind": "model_hypothesis",
+   "title": "H1: Guava 21.0 removed deprecated toStringHelper method",
+   "detail": "Category: dependency_regression; prior: high.\nCited support: \"[ERROR] /work/src/main/java/com/example/inventory/InventoryItem.java:[50,23] cannot find symbol\n  symbol:   method toStringHelper(com.example.inventory.InventoryItem)\n  location: class com.google.common.base.Objects\" (line 251) [not found in log]; \"dependency changes: [{\"ecosystem\":\"maven\",\"name\":\"guava\",\"from\":\"20.0\",\"to\":\"21.0\",\"file\":\"pom.xml\",\"removedLine\":\"    <guava.version>20.0</guava.version>\",\"addedLine\":\"    <guava.version>21.0</guava.version>\"}]\" (line 1) [not found in log]; \"commit message: build(deps): bump com.google.guava:guava from 20.0 to 21.0\" (line 1) [not found in log]\n3 cited quote(s) could not be found in the log or diff.",
+   "hypothesisKey": "H1",
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "model",
+    "ref": "nvidia/Nemotron-3_5-Lightning"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafujspfdbb4885",
+   "seq": 5,
+   "createdAt": "2026-10-16T03:59:03.865Z"
+  },
+  {
+   "kind": "model_hypothesis",
+   "title": "H2: InventoryItem.java source code references removed API that was previously tolerated or compiled via transitive dependency shading",
+   "detail": "Category: code_regression; prior: medium.\nCited support: \"[ERROR] /work/src/main/java/com/example/inventory/InventoryItem.java:[50,23] cannot find symbol\n  symbol:   method toStringHelper(com.example.inventory.InventoryItem)\n  location: class com.google.common.base.Objects\" (line 251) [not found in log]\n2 cited quote(s) could not be found in the log or diff.",
+   "hypothesisKey": "H2",
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "model",
+    "ref": "nvidia/Nemotron-3_5-Lightning"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafujspf1269de8",
+   "seq": 6,
+   "createdAt": "2026-10-16T03:59:03.865Z"
+  },
+  {
+   "kind": "model_hypothesis",
+   "title": "H3: Maven compiler plugin configuration or Java 17 compatibility issue masking the real problem",
+   "detail": "Category: infrastructure; prior: low.\nCited support: \"[INFO] Compiling 2 source files with javac [debug release 17] to target/classes\" (line 252); \"[ERROR] -> [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException\" (line 260) [not found in log]\n1 cited quote(s) could not be found in the log or diff.",
+   "hypothesisKey": "H3",
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "model",
+    "ref": "nvidia/Nemotron-3_5-Lightning"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafujspc411ae9e",
+   "seq": 7,
+   "createdAt": "2026-10-16T03:59:03.865Z"
+  },
+  {
+   "kind": "model_hypothesis",
+   "title": "H4: Transitive dependency conflict where another library pulls in Guava 21.0 and overrides the explicit 20.0 version, causing API mismatch",
+   "detail": "Category: dependency_regression; prior: low.\nNo cited support.\n1 cited quote(s) could not be found in the log or diff.",
+   "hypothesisKey": "H4",
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "model",
+    "ref": "nvidia/Nemotron-3_5-Lightning"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafujsp2dbbba44",
+   "seq": 8,
+   "createdAt": "2026-10-16T03:59:03.865Z"
+  },
+  {
+   "kind": "experiment_result",
+   "title": "Reproduce the failure @ 89c36cf227a2: 1/1 run failed (build failed before tests ran)",
+   "detail": "1/1 run failed (build failed before tests ran)\nCommand: mvn -B -o -Dmaven.repo.local=/cache/m2 test",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvlfb63750d",
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "experiment",
+    "ref": "exp_mvafujvlfb63750d"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuouz6c63891a",
+   "seq": 9,
+   "createdAt": "2026-10-16T03:59:10.427Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Supports H1",
+   "detail": "The failure reproduced in a clean sandbox at the failing commit.",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvlfb63750d",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuouz4ea29789",
+   "seq": 10,
+   "createdAt": "2026-10-16T03:59:10.427Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Supports H2",
+   "detail": "The failure reproduced in a clean sandbox at the failing commit.",
+   "hypothesisKey": "H2",
+   "experimentId": "exp_mvafujvlfb63750d",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuouz146836ba",
+   "seq": 11,
+   "createdAt": "2026-10-16T03:59:10.427Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Contradicts H3",
+   "detail": "The failure reproduced offline in a clean sandbox, away from the original CI infrastructure.",
+   "hypothesisKey": "H3",
+   "experimentId": "exp_mvafujvlfb63750d",
+   "sourceId": null,
+   "effect": "contradicts",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuov0d921a139",
+   "seq": 12,
+   "createdAt": "2026-10-16T03:59:10.428Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Supports H4",
+   "detail": "The failure reproduced in a clean sandbox at the failing commit.",
+   "hypothesisKey": "H4",
+   "experimentId": "exp_mvafujvlfb63750d",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuov0920f73f5",
+   "seq": 13,
+   "createdAt": "2026-10-16T03:59:10.428Z"
+  },
+  {
+   "kind": "experiment_result",
+   "title": "Compare against the parent commit @ 3b1e09cfb847: 0/1 run failed",
+   "detail": "0/1 run failed\nCommand: mvn -B -o -Dmaven.repo.local=/cache/m2 test",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl15a54eac",
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "experiment",
+    "ref": "exp_mvafujvl15a54eac"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuu8y44a56fe3",
+   "seq": 14,
+   "createdAt": "2026-10-16T03:59:17.410Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Supports H1",
+   "detail": "The parent commit passed 1/1 runs of the same selection.",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl15a54eac",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuu8y9eee94a6",
+   "seq": 15,
+   "createdAt": "2026-10-16T03:59:17.410Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Supports H2",
+   "detail": "The parent commit passed 1/1 runs of the same selection.",
+   "hypothesisKey": "H2",
+   "experimentId": "exp_mvafujvl15a54eac",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuu8y53601dde",
+   "seq": 16,
+   "createdAt": "2026-10-16T03:59:17.410Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Supports H4",
+   "detail": "The parent commit passed 1/1 runs of the same selection.",
+   "hypothesisKey": "H4",
+   "experimentId": "exp_mvafujvl15a54eac",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "policy",
+    "ref": "experiment-effect rules"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuu8y4ad008ba",
+   "seq": 17,
+   "createdAt": "2026-10-16T03:59:17.410Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Objects (Guava: Google Core Libraries for Java 20.0 API)",
+   "detail": "| `static Objects.ToStringHelper` | `toStringHelper` Deprecated. Use `MoreObjects.toStringHelper(String)` instead. This method is scheduled for removal in Guava 21.0. | [...] Deprecated. Use `MoreObjects.toStringHelper(Object)` instead. This method is scheduled for removal in Guava 21.0.\n\n      Creates an instance of `Objects.ToStringHelper`.\n\n      This is helpful for implementing `Object.toStrin\n\nQuery: \"guava 21.0 release notes com.google.common.base.Objects.toStringHelper removed\"",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl0bcc7121",
+   "sourceId": "src_mvafuuzh258e8774",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://guava.dev/releases/20.0/api/docs/com/google/common/base/Objects.html",
+    "ref": "1be3bb23-299c-43fe-b685-df8d8c12d9ac"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuuzia36486fe",
+   "seq": 18,
+   "createdAt": "2026-10-16T03:59:18.366Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Deprecated List (Guava: Google Core Libraries for Java 20.0 API)",
+   "detail": "| com.google.common.base.Objects.toStringHelper(Object) Use `MoreObjects.toStringHelper(Object)` instead. This method is scheduled for removal in Guava 21.0. |\n  | com.google.common.base.Objects.toStringHelper(String) Use `MoreObjects.toStringHelper(String)` instead. This method is scheduled for removal in Guava 21.0. |\n  | com.google.common.collect.Iterables.unmodifiableIterable(ImmutableCollecti\n\nQuery: \"guava 21.0 release notes com.google.common.base.Objects.toStringHelper removed\"",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl0bcc7121",
+   "sourceId": "src_mvafuuzi5980823d",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://guava.dev/releases/20.0/api/docs/deprecated-list.html",
+    "ref": "1be3bb23-299c-43fe-b685-df8d8c12d9ac"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuuzj0ea4a6bb",
+   "seq": 19,
+   "createdAt": "2026-10-16T03:59:18.367Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Release21 \u00b7 google/guava Wiki \u00b7 GitHub",
+   "detail": "### common.base\n\n `Function`, `Predicate` and `Supplier`: changed to extend the new `java.util.function` interfaces with the same names.\n `Optional`: added `toJavaUtil` and `fromJavaUtil` methods for easy conversion between Guava's `Optional` and `java.util.Optional`.\n `Objects`: removed deprecated `firstNonNull` and `toStringHelper` methods (both found on `MoreObjects` since Guava 18.0).\n\n### com\n\nQuery: \"guava 21.0 release notes com.google.common.base.Objects.toStringHelper removed\"",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl0bcc7121",
+   "sourceId": "src_mvafuuzjfef0cd72",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://github.com/google/guava/wiki/Release21",
+    "ref": "1be3bb23-299c-43fe-b685-df8d8c12d9ac"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuuzj1287515b",
+   "seq": 20,
+   "createdAt": "2026-10-16T03:59:18.367Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Resolving deprecated com.google.common (Guava) library usage detected during deployment | Adobe Experience Manager as a Cloud Service",
+   "detail": "The `com.google.common` API is fully deprecated and scheduled for removal in AEM as a Cloud Service. Cloud Manager flags any bundle that imports `com.google.common.`, regardless of whether the dependency is explicit, transitive, or test-scope. Deprecated usage can originate from outdated ACS AEM Commons versions, Core Components example packages, `io.wcm` testing libraries, `slf4j-test`, `sling-mo\n\nQuery: \"guava 21.0 release notes com.google.common.base.Objects.toStringHelper removed\"",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl0bcc7121",
+   "sourceId": "src_mvafuuzj269146dd",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://experienceleague.adobe.com/en/docs/experience-cloud-kcs/kbarticles/ka-34621",
+    "ref": "1be3bb23-299c-43fe-b685-df8d8c12d9ac"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuuzj98306ca4",
+   "seq": 21,
+   "createdAt": "2026-10-16T03:59:18.367Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Objects (Guava: Google Core Libraries for Java 20.0 API)",
+   "detail": "Deprecated. Use `MoreObjects.toStringHelper(Object)` instead. This method is scheduled for removal in Guava 21.0.\n\n      Creates an instance of `Objects.ToStringHelper`.\n\n      This is helpful for implementing `Object.toString()`. Specification by example: [...] | `static Objects.ToStringHelper` | `toStringHelper` Deprecated. Use `MoreObjects.toStringHelper(String)` instead. This method is schedul\n\nQuery: \"Guava 21.0 removed Objects.toStringHelper\"",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl0bcc7121",
+   "sourceId": "src_mvafuwbn85d26fa2",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://guava.dev/releases/20.0/api/docs/com/google/common/base/Objects.html",
+    "ref": "9792a455-de08-489e-b46a-d5735a31ef34"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuwbn46a302a5",
+   "seq": 22,
+   "createdAt": "2026-10-16T03:59:20.099Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Deprecated List (Guava: Google Core Libraries for Java 20.0 API)",
+   "detail": "| com.google.common.base.Objects.toStringHelper(Object) Use `MoreObjects.toStringHelper(Object)` instead. This method is scheduled for removal in Guava 21.0. |\n  | com.google.common.base.Objects.toStringHelper(String) Use `MoreObjects.toStringHelper(String)` instead. This method is scheduled for removal in Guava 21.0. |\n  | com.google.common.collect.Iterables.unmodifiableIterable(ImmutableCollecti\n\nQuery: \"Guava 21.0 removed Objects.toStringHelper\"",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl0bcc7121",
+   "sourceId": "src_mvafuwbn64618dfd",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://guava.dev/releases/20.0/api/docs/deprecated-list.html",
+    "ref": "9792a455-de08-489e-b46a-d5735a31ef34"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuwbn77812e9e",
+   "seq": 23,
+   "createdAt": "2026-10-16T03:59:20.099Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "[HADOOP-14891] Remove references to Guava Objects.toStringHelper - ASF Jira",
+   "detail": "#### Description\n\nUse provided a guava 23.0 jar as part of the job submission.\n\n```\nObject Object Object String String do for\n```\n\nMetrics2 has been relying on deprecated toStringHelper for some time now which was finally removed in guava 21.0. Removing the dependency on this method will free up the user to supplying their own guava jar again.\n\n#### Attachments\n\n#### Attachments\n\n + Sort By Name\n \n\nQuery: \"Guava 21.0 removed Objects.toStringHelper\"",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl0bcc7121",
+   "sourceId": "src_mvafuwbof8a11d80",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://issues.apache.org/jira/browse/HADOOP-14891",
+    "ref": "9792a455-de08-489e-b46a-d5735a31ef34"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuwbof3e8964c",
+   "seq": 24,
+   "createdAt": "2026-10-16T03:59:20.100Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Objects.ToStringHelper (Guava: Google Core Libraries for Java 20.0 API)",
+   "detail": "Skip navigation links\n\n Overview\n Package\n Class\n Use\n Tree\n Deprecated\n Index\n Help\n\n Prev Class\n Next Class\n\n Frames\n No Frames\n\n All Classes\n\n Summary:\n Nested |\n Field |\n Constr |\n Method\n\n Detail:\n Field |\n Constr |\n Method\n\ncom.google.common.base\n\n## Class Objects.ToStringHelper\n\n java.lang.Object\n + com.google.common.base.Objects.ToStringHelper\n\n Enclosing class:\n  :   Objects\n\n  Deprecated\n\nQuery: \"Guava 21.0 removed Objects.toStringHelper\"",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl0bcc7121",
+   "sourceId": "src_mvafuwbo93bcabd3",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://guava.dev/releases/20.0/api/docs/com/google/common/base/Objects.ToStringHelper.html",
+    "ref": "9792a455-de08-489e-b46a-d5735a31ef34"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuwbo27adbaa5",
+   "seq": 25,
+   "createdAt": "2026-10-16T03:59:20.100Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Welcome to Apache Maven \u2013 Maven",
+   "detail": "To get started, search the documentation, issue management system, the wiki, or the mailing list archives to see if the problem has been solved or reported before.\n\nIf the problem has not been reported before, the recommended way to get help is to subscribe to the Maven Users Mailing list. Many other users and Maven developers will answer your questions there, and the answer will be archived for o\n\nQuery: \"Maven guava 21.0 compilation error toStringHelper deprecated\"",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl0bcc7121",
+   "sourceId": "src_mvafuxcz57658c1e",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://maven.apache.org",
+    "ref": "96382715-68cf-48c3-a4f9-acce57f19f42"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuxd077f87a02",
+   "seq": 26,
+   "createdAt": "2026-10-16T03:59:21.444Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Apache Maven - Wikipedia",
+   "detail": "Maven is a build automation tool used primarily for Java \"Java (programming language)\") projects. Maven can also be used to build and manage projects written in C# \"C Sharp (programming language)\"), Ruby \"Ruby (programming language)\"), Scala \"Scala (programming language)\"), and other languages. The Maven project is hosted by The Apache Software Foundation, where it was formerly part of the Jakarta\n\nQuery: \"Maven guava 21.0 compilation error toStringHelper deprecated\"",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl0bcc7121",
+   "sourceId": "src_mvafuxd005ecc0dd",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://en.wikipedia.org/wiki/Apache_Maven",
+    "ref": "96382715-68cf-48c3-a4f9-acce57f19f42"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuxd0835e5be7",
+   "seq": 27,
+   "createdAt": "2026-10-16T03:59:21.444Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "MAVEN - Wikipedia",
+   "detail": "Edit links\n\n Article\n Talk\n\n Read\n Edit\n View history\n\nTools\n\nActions\n\n Read\n Edit\n View history\n\nGeneral\n\n What links here\n Related changes\n Upload file\n Permanent link\n Page information\n Cite this page\n Get shortened URL\n Switch to legacy parser\n\nPrint/export\n\n Download as PDF\n Printable version\n\nIn other projects\n\n Wikimedia Commons\n Wikidata item\n\nAppearance\n\nFrom Wikipedia, the free encyclope\n\nQuery: \"Maven guava 21.0 compilation error toStringHelper deprecated\"",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl0bcc7121",
+   "sourceId": "src_mvafuxd019de5b33",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://en.wikipedia.org/wiki/MAVEN",
+    "ref": "96382715-68cf-48c3-a4f9-acce57f19f42"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuxd014bedf01",
+   "seq": 28,
+   "createdAt": "2026-10-16T03:59:21.444Z"
+  },
+  {
+   "kind": "external_source",
+   "title": "Download Apache Maven \u2013 Maven",
+   "detail": "It is strongly recommended to use the latest release version of Apache Maven to take advantage of newest features and bug fixes.\n\nIf you still want to use an old version, you can find more information in the Maven Releases History and can download files from the Maven 3 archives for versions 3.0.4+ and legacy archives for earlier releases.\n\n## Preview 3.10.x Release [...] Apache Maven 3.9.16 is th\n\nQuery: \"Maven guava 21.0 compilation error toStringHelper deprecated\"",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafujvl0bcc7121",
+   "sourceId": "src_mvafuxd0f7b91973",
+   "effect": null,
+   "provenance": {
+    "type": "web",
+    "url": "https://maven.apache.org/download.cgi",
+    "ref": "96382715-68cf-48c3-a4f9-acce57f19f42"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuxd02d4243a9",
+   "seq": 29,
+   "createdAt": "2026-10-16T03:59:21.444Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Verdict after experiments: probable \u2014 dependency regression",
+   "detail": "The upgrade to Guava 21.0 removed the deprecated toStringHelper method from com.google.common.base.Objects, causing a compilation failure in InventoryItem.java. The parent commit builds successfully, confirming the regression is due to the dependency change.\n\nAlibi policy: \"Confirmed\" requires strong experimental evidence; the evidence rubric rates it moderate.",
+   "hypothesisKey": "H1",
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "model",
+    "ref": "nvidia/nemotron-3-super-120b-a12b"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafuz8rc9c96423",
+   "seq": 30,
+   "createdAt": "2026-10-16T03:59:23.883Z"
+  },
+  {
+   "kind": "experiment_result",
+   "title": "Candidate failed validation: Targeted fix by Nemotron-3-Ultra-550b-a55b",
+   "detail": "Targeted runs: 3/3 runs failed \u2014 failing: com.example.inventory.InventoryItemTest#rendersReadableToString (observed failure rate 100%, 95% CI 44\u2013100%).",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafv4vb666cc2e0",
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "experiment",
+    "ref": "exp_mvafv4vb666cc2e0"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafv9ypba9c3f67",
+   "seq": 31,
+   "createdAt": "2026-10-16T03:59:37.777Z"
+  },
+  {
+   "kind": "experiment_result",
+   "title": "Candidate validated: Pin guava back to 20.0",
+   "detail": "Passed 3/3 targeted runs (full build and suite).",
+   "hypothesisKey": "H1",
+   "experimentId": "exp_mvafve051d1b612c",
+   "sourceId": null,
+   "effect": "supports",
+   "provenance": {
+    "type": "experiment",
+    "ref": "exp_mvafve051d1b612c"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafvjfkad7a3b9f",
+   "seq": 32,
+   "createdAt": "2026-10-16T03:59:50.048Z"
+  },
+  {
+   "kind": "assumption",
+   "title": "Sandbox approximates CI",
+   "detail": "Experiments ran in maven:3.9-eclipse-temurin-17 with networking disabled, not on the original CI runner; environment-specific causes (runner image, caches, secrets, network) are not reproduced.",
+   "hypothesisKey": null,
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "policy",
+    "ref": "runner"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafvjfl9b3dcc1f",
+   "seq": 33,
+   "createdAt": "2026-10-16T03:59:50.049Z"
+  },
+  {
+   "kind": "inference",
+   "title": "Final verdict: confirmed \u2014 dependency regression (strong evidence)",
+   "detail": "Evidence rubric: strong.\n\nBasis:\n\u2022 Failure reproduced in a clean sandbox at the failing commit.\n\u2022 Parent commit: 0/1 runs failed.\n\u2022 The failing commit changes a dependency version.\n\u2022 A candidate fix passed the failing selection and the regression suite (Pin guava back to 20.0).\n\u2022 8 external source(s) are consistent with this cause (treated as leads, not proof).\n\nRecommended action: Replace com.google.common.base.Objects.toStringHelper(...) with com.google.common.base.MoreObjects.toStringHelper(...) in InventoryItem.java.",
+   "hypothesisKey": "H1",
+   "experimentId": null,
+   "sourceId": null,
+   "effect": null,
+   "provenance": {
+    "type": "policy",
+    "ref": "confidence rubric"
+   },
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "id": "ev_mvafvjfl591ec82b",
+   "seq": 34,
+   "createdAt": "2026-10-16T03:59:50.049Z"
+  }
+ ],
+ "sources": [
+  {
+   "id": "src_mvafuuzh258e8774",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "query": "guava 21.0 release notes com.google.common.base.Objects.toStringHelper removed",
+   "title": "Objects (Guava: Google Core Libraries for Java 20.0 API)",
+   "url": "https://guava.dev/releases/20.0/api/docs/com/google/common/base/Objects.html",
+   "domain": "guava.dev",
+   "excerpt": "| `static Objects.ToStringHelper` | `toStringHelper` Deprecated. Use `MoreObjects.toStringHelper(String)` instead. This method is scheduled for removal in Guava 21.0. | [...] Deprecated. Use `MoreObjects.toStringHelper(Object)` instead. This method is scheduled for removal in Guava 21.0.\n\n      Creates an instance of `Objects.ToStringHelper`.\n\n      This is helpful for implementing `Object.toString()`. Specification by example: [...] | `static Objects.ToStringHelper` | `toStringHelper` Deprecated. Use `MoreObjects.toStringHelper(Class)` instead. This method is scheduled for removal in Guava 21.0. |\n    | `static Objects.ToStringHelper` | `toStringHelper` Deprecated. Use `MoreObjects.toString",
+   "score": 0.89166987,
+   "publishedDate": null,
+   "official": true,
+   "relevance": "Primary source (official domain or project repository).",
+   "retrievedAt": "2026-10-16T03:59:18.365Z"
+  },
+  {
+   "id": "src_mvafuuzi5980823d",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "query": "guava 21.0 release notes com.google.common.base.Objects.toStringHelper removed",
+   "title": "Deprecated List (Guava: Google Core Libraries for Java 20.0 API)",
+   "url": "https://guava.dev/releases/20.0/api/docs/deprecated-list.html",
+   "domain": "guava.dev",
+   "excerpt": "| com.google.common.base.Objects.toStringHelper(Object) Use `MoreObjects.toStringHelper(Object)` instead. This method is scheduled for removal in Guava 21.0. |\n  | com.google.common.base.Objects.toStringHelper(String) Use `MoreObjects.toStringHelper(String)` instead. This method is scheduled for removal in Guava 21.0. |\n  | com.google.common.collect.Iterables.unmodifiableIterable(ImmutableCollection) no need to use this | [...] | com.google.common.collect.ImmutableMultiset.setCount(E, int) Unsupported operation. |\n  | com.google.common.collect.ImmutableMultiset.setCount(E, int, int) Unsupported operation. |\n  | com.google.common.base.Objects.toStringHelper(Class) Use `MoreObjects.toStringHel",
+   "score": 0.8830044,
+   "publishedDate": null,
+   "official": true,
+   "relevance": "Primary source (official domain or project repository).",
+   "retrievedAt": "2026-10-16T03:59:18.366Z"
+  },
+  {
+   "id": "src_mvafuuzjfef0cd72",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "query": "guava 21.0 release notes com.google.common.base.Objects.toStringHelper removed",
+   "title": "Release21 \u00b7 google/guava Wiki \u00b7 GitHub",
+   "url": "https://github.com/google/guava/wiki/Release21",
+   "domain": "github.com",
+   "excerpt": "### common.base\n\n `Function`, `Predicate` and `Supplier`: changed to extend the new `java.util.function` interfaces with the same names.\n `Optional`: added `toJavaUtil` and `fromJavaUtil` methods for easy conversion between Guava's `Optional` and `java.util.Optional`.\n `Objects`: removed deprecated `firstNonNull` and `toStringHelper` methods (both found on `MoreObjects` since Guava 18.0).\n\n### common.cache [...] #### Removed classes\n\n `MapConstraint` and `MapConstraints`: deprecated since 19.0.\n\n#### Changes [...] # Release21\n\nJump to bottom\n\nChris Povirk edited this page Jul 13, 2018 \u00b7 10 revisions\n\n# Guava Release 21.0: Release Notes\n\n 21.0 was released on January 12, 2017.\n 21.0-rc2 was r",
+   "score": 0.84767824,
+   "publishedDate": "Fri, 13 Jul 2018 00:00:00 GMT",
+   "official": true,
+   "relevance": "Primary source (official domain or project repository).",
+   "retrievedAt": "2026-10-16T03:59:18.367Z"
+  },
+  {
+   "id": "src_mvafuuzj269146dd",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "query": "guava 21.0 release notes com.google.common.base.Objects.toStringHelper removed",
+   "title": "Resolving deprecated com.google.common (Guava) library usage detected during deployment | Adobe Experience Manager as a Cloud Service",
+   "url": "https://experienceleague.adobe.com/en/docs/experience-cloud-kcs/kbarticles/ka-34621",
+   "domain": "experienceleague.adobe.com",
+   "excerpt": "The `com.google.common` API is fully deprecated and scheduled for removal in AEM as a Cloud Service. Cloud Manager flags any bundle that imports `com.google.common.`, regardless of whether the dependency is explicit, transitive, or test-scope. Deprecated usage can originate from outdated ACS AEM Commons versions, Core Components example packages, `io.wcm` testing libraries, `slf4j-test`, `sling-mock`, Asset Share Commons, or custom code using Guava utilities such as `Lists.partition()`. On AEM [...] Validation\n\n1. Run `mvn dependency:tree` again and confirm no modules import `com.google.common.`.\n2. Check Cloud Manager analyser logs after deployment to confirm no deprecated library warnings ",
+   "score": 0.6161283,
+   "publishedDate": "Tue, 18 Aug 2026 00:00:00 GMT",
+   "official": false,
+   "relevance": "Secondary source; treat as a lead.",
+   "retrievedAt": "2026-10-16T03:59:18.367Z"
+  },
+  {
+   "id": "src_mvafuwbn85d26fa2",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "query": "Guava 21.0 removed Objects.toStringHelper",
+   "title": "Objects (Guava: Google Core Libraries for Java 20.0 API)",
+   "url": "https://guava.dev/releases/20.0/api/docs/com/google/common/base/Objects.html",
+   "domain": "guava.dev",
+   "excerpt": "Deprecated. Use `MoreObjects.toStringHelper(Object)` instead. This method is scheduled for removal in Guava 21.0.\n\n      Creates an instance of `Objects.ToStringHelper`.\n\n      This is helpful for implementing `Object.toString()`. Specification by example: [...] | `static Objects.ToStringHelper` | `toStringHelper` Deprecated. Use `MoreObjects.toStringHelper(String)` instead. This method is scheduled for removal in Guava 21.0. | [...] | `static Objects.ToStringHelper` | `toStringHelper` Deprecated. Use `MoreObjects.toStringHelper(Class)` instead. This method is scheduled for removal in Guava 21.0. |\n    | `static Objects.ToStringHelper` | `toStringHelper` Deprecated. Use `MoreObjects.toString",
+   "score": 0.9053309,
+   "publishedDate": null,
+   "official": true,
+   "relevance": "Primary source (official domain or project repository).",
+   "retrievedAt": "2026-10-16T03:59:20.099Z"
+  },
+  {
+   "id": "src_mvafuwbn64618dfd",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "query": "Guava 21.0 removed Objects.toStringHelper",
+   "title": "Deprecated List (Guava: Google Core Libraries for Java 20.0 API)",
+   "url": "https://guava.dev/releases/20.0/api/docs/deprecated-list.html",
+   "domain": "guava.dev",
+   "excerpt": "| com.google.common.base.Objects.toStringHelper(Object) Use `MoreObjects.toStringHelper(Object)` instead. This method is scheduled for removal in Guava 21.0. |\n  | com.google.common.base.Objects.toStringHelper(String) Use `MoreObjects.toStringHelper(String)` instead. This method is scheduled for removal in Guava 21.0. |\n  | com.google.common.collect.Iterables.unmodifiableIterable(ImmutableCollection) no need to use this | [...] | com.google.common.collect.ImmutableMultiset.setCount(E, int) Unsupported operation. |\n  | com.google.common.collect.ImmutableMultiset.setCount(E, int, int) Unsupported operation. |\n  | com.google.common.base.Objects.toStringHelper(Class) Use `MoreObjects.toStringHel",
+   "score": 0.8747745,
+   "publishedDate": null,
+   "official": true,
+   "relevance": "Primary source (official domain or project repository).",
+   "retrievedAt": "2026-10-16T03:59:20.099Z"
+  },
+  {
+   "id": "src_mvafuwbof8a11d80",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "query": "Guava 21.0 removed Objects.toStringHelper",
+   "title": "[HADOOP-14891] Remove references to Guava Objects.toStringHelper - ASF Jira",
+   "url": "https://issues.apache.org/jira/browse/HADOOP-14891",
+   "domain": "issues.apache.org",
+   "excerpt": "#### Description\n\nUse provided a guava 23.0 jar as part of the job submission.\n\n```\nObject Object Object String String do for\n```\n\nMetrics2 has been relying on deprecated toStringHelper for some time now which was finally removed in guava 21.0. Removing the dependency on this method will free up the user to supplying their own guava jar again.\n\n#### Attachments\n\n#### Attachments\n\n + Sort By Name\n  + Sort By Date\n  + Ascending\n  + Descending [...] Major - Major loss of function.\n     Resolved\n:   Improvement - An improvement or enhancement to an existing feature or task.  HADOOP-14382 Remove usages of MoreObjects.toStringHelper\n\n     Minor - Minor loss of function, or other problem where easy",
+   "score": 0.8737439,
+   "publishedDate": "Fri, 22 Jun 2018 00:00:00 GMT",
+   "official": false,
+   "relevance": "Secondary source; treat as a lead.",
+   "retrievedAt": "2026-10-16T03:59:20.100Z"
+  },
+  {
+   "id": "src_mvafuwbo93bcabd3",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "query": "Guava 21.0 removed Objects.toStringHelper",
+   "title": "Objects.ToStringHelper (Guava: Google Core Libraries for Java 20.0 API)",
+   "url": "https://guava.dev/releases/20.0/api/docs/com/google/common/base/Objects.ToStringHelper.html",
+   "domain": "guava.dev",
+   "excerpt": "Skip navigation links\n\n Overview\n Package\n Class\n Use\n Tree\n Deprecated\n Index\n Help\n\n Prev Class\n Next Class\n\n Frames\n No Frames\n\n All Classes\n\n Summary:\n Nested |\n Field |\n Constr |\n Method\n\n Detail:\n Field |\n Constr |\n Method\n\ncom.google.common.base\n\n## Class Objects.ToStringHelper\n\n java.lang.Object\n + com.google.common.base.Objects.ToStringHelper\n\n Enclosing class:\n  :   Objects\n\n  Deprecated.\n\n  Use `MoreObjects.ToStringHelper` instead. This class is scheduled for removal in Guava 21.0. [...] | `String` | `toString` Deprecated.  Returns a string in the format specified by `Objects.toStringHelper(Object)`. | [...] ```\n  @Deprecated public static final class Objects.ToStringHelper extend",
+   "score": 0.83452857,
+   "publishedDate": null,
+   "official": true,
+   "relevance": "Primary source (official domain or project repository).",
+   "retrievedAt": "2026-10-16T03:59:20.100Z"
+  },
+  {
+   "id": "src_mvafuxcz57658c1e",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "query": "Maven guava 21.0 compilation error toStringHelper deprecated",
+   "title": "Welcome to Apache Maven \u2013 Maven",
+   "url": "https://maven.apache.org",
+   "domain": "maven.apache.org",
+   "excerpt": "To get started, search the documentation, issue management system, the wiki, or the mailing list archives to see if the problem has been solved or reported before.\n\nIf the problem has not been reported before, the recommended way to get help is to subscribe to the Maven Users Mailing list. Many other users and Maven developers will answer your questions there, and the answer will be archived for others in the future.\n\nYou can also reach the Maven developers on Slack. [...] # \n\n# \n\nEdit\nBuilt by Maven\n\n# Welcome to Apache Maven\n\nApache Maven is a build tool for Java projects. Using a project object model (POM), Maven manages a project's compilation, testing, and documentation.\n\nYou can find m",
+   "score": 0.19705823,
+   "publishedDate": null,
+   "official": true,
+   "relevance": "Primary source (official domain or project repository).",
+   "retrievedAt": "2026-10-16T03:59:21.443Z"
+  },
+  {
+   "id": "src_mvafuxd005ecc0dd",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "query": "Maven guava 21.0 compilation error toStringHelper deprecated",
+   "title": "Apache Maven - Wikipedia",
+   "url": "https://en.wikipedia.org/wiki/Apache_Maven",
+   "domain": "en.wikipedia.org",
+   "excerpt": "Maven is a build automation tool used primarily for Java \"Java (programming language)\") projects. Maven can also be used to build and manage projects written in C# \"C Sharp (programming language)\"), Ruby \"Ruby (programming language)\"), Scala \"Scala (programming language)\"), and other languages. The Maven project is hosted by The Apache Software Foundation, where it was formerly part of the Jakarta Project. [...] Retrieved from \"\"\n\nCategories:\n\n Apache Software Foundation projects\n Build automation\n Compiling tools\n Java development tools\n Software using the Apache license\n\nHidden categories:\n\n Articles with short description\n Short description is different from Wikidata\n CS1 maint: others\n\nA",
+   "score": 0.16595806,
+   "publishedDate": null,
+   "official": false,
+   "relevance": "Secondary source; treat as a lead.",
+   "retrievedAt": "2026-10-16T03:59:21.444Z"
+  },
+  {
+   "id": "src_mvafuxd019de5b33",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "query": "Maven guava 21.0 compilation error toStringHelper deprecated",
+   "title": "MAVEN - Wikipedia",
+   "url": "https://en.wikipedia.org/wiki/MAVEN",
+   "domain": "en.wikipedia.org",
+   "excerpt": "Edit links\n\n Article\n Talk\n\n Read\n Edit\n View history\n\nTools\n\nActions\n\n Read\n Edit\n View history\n\nGeneral\n\n What links here\n Related changes\n Upload file\n Permanent link\n Page information\n Cite this page\n Get shortened URL\n Switch to legacy parser\n\nPrint/export\n\n Download as PDF\n Printable version\n\nIn other projects\n\n Wikimedia Commons\n Wikidata item\n\nAppearance\n\nFrom Wikipedia, the free encyclopedia\n\nNASA Mars orbiter (2013\u20132025) [...] |  v  t  e  21st-century space probes | [...] |  v  t  e  2014 in space |",
+   "score": 0.14850381,
+   "publishedDate": null,
+   "official": false,
+   "relevance": "Secondary source; treat as a lead.",
+   "retrievedAt": "2026-10-16T03:59:21.444Z"
+  },
+  {
+   "id": "src_mvafuxd0f7b91973",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "hypothesisKey": "H1",
+   "query": "Maven guava 21.0 compilation error toStringHelper deprecated",
+   "title": "Download Apache Maven \u2013 Maven",
+   "url": "https://maven.apache.org/download.cgi",
+   "domain": "maven.apache.org",
+   "excerpt": "It is strongly recommended to use the latest release version of Apache Maven to take advantage of newest features and bug fixes.\n\nIf you still want to use an old version, you can find more information in the Maven Releases History and can download files from the Maven 3 archives for versions 3.0.4+ and legacy archives for earlier releases.\n\n## Preview 3.10.x Release [...] Apache Maven 3.9.16 is the latest release. It is the recommended version for all users.\n\nMaven 3.9+ requires JDK 8 or above to execute. It still allows you to build against 1.3 and other JDK versions by using toolchains.\n\nMaven is distributed in several formats for your convenience. Simply pick a ready-made binary distribut",
+   "score": 0.10608732,
+   "publishedDate": "Fri, 07 Aug 2026 16:00:00 GMT",
+   "official": true,
+   "relevance": "Primary source (official domain or project repository).",
+   "retrievedAt": "2026-10-16T03:59:21.444Z"
+  }
+ ],
+ "patches": [
+  {
+   "id": "patch_mvafv0r1a241a959",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "origin": "model",
+   "strategy": "code_patch",
+   "title": "Targeted fix by Nemotron-3-Ultra-550b-a55b",
+   "rationale": "The compilation error occurs because Guava 21.0 removed the deprecated `Objects.toStringHelper()` method that was used in InventoryItem.java. The fix is to replace the Guava-based toString implementation with a standard Java implementation using StringBuilder or String.format, which eliminates the dependency on the removed method.",
+   "diff": "diff --git a/src/main/java/com/example/inventory/InventoryItem.java b/src/main/java/com/example/inventory/InventoryItem.java\nindex a855ef2..8d3d583 100644\n--- a/src/main/java/com/example/inventory/InventoryItem.java\n+++ b/src/main/java/com/example/inventory/InventoryItem.java\n@@ -1,6 +1,5 @@\n package com.example.inventory;\n \n-import com.google.common.base.Objects;\n import com.google.common.base.Preconditions;\n \n /** A stock-keeping unit tracked by the inventory service. */\n@@ -42,15 +41,15 @@ public final class InventoryItem {\n \n     @Override\n     public int hashCode() {\n-        return Objects.hashCode(sku, name, quantity);\n+        return java.util.Objects.hash(sku, name, quantity);\n     }\n \n     @Override\n     public String toString() {\n-        return Objects.toStringHelper(this)\n-                .add(\"sku\", sku)\n-                .add(\"name\", name)\n-                .add(\"quantity\", quantity)\n-                .toString();\n+        return \"InventoryItem{\" +\n+                \"sku='\" + sku + '\\'' +\n+                \", name='\" + name + '\\'' +\n+                \", quantity=\" + quantity +\n+                '}';\n     }\n }\n",
+   "files": [
+    "src/main/java/com/example/inventory/InventoryItem.java"
+   ],
+   "status": "failed",
+   "validation": {
+    "targetedExperimentId": "exp_mvafv4vb666cc2e0",
+    "suiteExperimentId": "exp_mvafv4vb666cc2e0",
+    "summary": "Targeted runs: 3/3 runs failed \u2014 failing: com.example.inventory.InventoryItemTest#rendersReadableToString (observed failure rate 100%, 95% CI 44\u2013100%)."
+   },
+   "prUrl": null,
+   "prBranch": null,
+   "createdAt": "2026-10-16T03:59:25.837Z"
+  },
+  {
+   "id": "patch_mvafva78705a1fe7",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "origin": "deterministic",
+   "strategy": "dependency_pin",
+   "title": "Pin guava back to 20.0",
+   "rationale": "Restores guava 20.0 (the version used by the passing parent commit) until the code is migrated to 21.0.",
+   "diff": "diff --git a/pom.xml b/pom.xml\nindex c064079..0f605ba 100644\n--- a/pom.xml\n+++ b/pom.xml\n@@ -12,7 +12,7 @@\n   <properties>\n     <maven.compiler.release>17</maven.compiler.release>\n     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>\n-    <guava.version>21.0</guava.version>\n+    <guava.version>20.0</guava.version>\n     <junit.version>5.10.2</junit.version>\n   </properties>\n \n",
+   "files": [
+    "pom.xml"
+   ],
+   "status": "validated",
+   "validation": {
+    "targetedExperimentId": "exp_mvafve051d1b612c",
+    "suiteExperimentId": "exp_mvafve051d1b612c",
+    "summary": "Passed 3/3 targeted runs (full build and suite)."
+   },
+   "prUrl": null,
+   "prBranch": null,
+   "createdAt": "2026-10-16T03:59:38.084Z"
+  }
+ ],
+ "modelCalls": [
+  {
+   "id": "mc_mvafujslaf367349",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "step": "triage",
+   "role": "triage",
+   "model": "nvidia/Nemotron-3_5-Lightning",
+   "status": "ok",
+   "startedAt": "2026-10-16T03:59:00.067Z",
+   "durationMs": 3277,
+   "inputChars": 7714,
+   "promptTokens": 2340,
+   "completionTokens": 903,
+   "attempts": 1,
+   "error": null
+  },
+  {
+   "id": "mc_mvafuz8r2331c033",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "step": "verdict",
+   "role": "reasoning",
+   "model": "nvidia/nemotron-3-super-120b-a12b",
+   "status": "ok",
+   "startedAt": "2026-10-16T03:59:21.445Z",
+   "durationMs": 2438,
+   "inputChars": 8452,
+   "promptTokens": 2364,
+   "completionTokens": 339,
+   "attempts": 1,
+   "error": null
+  },
+  {
+   "id": "mc_mvafv0k689f0b546",
+   "investigationId": "inv_mvafugsd9090b5d1",
+   "step": "patch",
+   "role": "deep",
+   "model": "nvidia/Nemotron-3-Ultra-550b-a55b",
+   "status": "ok",
+   "startedAt": "2026-10-16T03:59:23.884Z",
+   "durationMs": 1706,
+   "inputChars": 6783,
+   "promptTokens": 1699,
+   "completionTokens": 502,
+   "attempts": 1,
+   "error": null
+  }
+ ],
+ "queuePosition": -1
+}

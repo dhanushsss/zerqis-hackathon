@@ -1,0 +1,22 @@
+{
+  "id": "flaky-jest",
+  "title": "Flaky Jest test in checkout-service",
+  "summary": "A docs-only commit turned CI red. The failing test depends on random jitter in a retry queue.",
+  "repository": "alibi-demo/checkout-service",
+  "framework": "jest",
+  "branch": "main",
+  "workflow": "CI",
+  "job": "test (node 20)",
+  "ciCommand": ["npx", "jest", "--ci", "--showSeed"],
+  "commits": [
+    { "dir": "01-base", "message": "feat: cart totals and webhook retry queue", "author": "Priya Raman <priya@example.dev>", "date": "2026-10-12T15:04:00Z" },
+    { "dir": "02-docs", "message": "docs: document retry queue tuning knobs", "author": "Sam Okafor <sam@example.dev>", "date": "2026-10-14T09:11:00Z" }
+  ],
+  "expected": {
+    "classification": "flaky_test",
+    "failingTest": { "file": "test/retryQueue.test.js", "name": "planDeliveries delivers notifications in submission order" },
+    "experiments": ["reproduce", "repeat", "compare_parent", "validate_patch"],
+    "remediation": "quarantine",
+    "notes": "The failing commit only touches README.md. Repeated runs with explicit Jest seeds 1..10 fail a minority of the time on both the failing commit and its parent."
+  }
+}

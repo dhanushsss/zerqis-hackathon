@@ -1,0 +1,31 @@
+{
+  "name": "alibi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Alibi \u2014 CI failure forensics. Don't just explain the failure. Prove it.",
+  "license": "MIT",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "npm run dev -w server & npm run dev -w web",
+    "build": "npm run build -w web && npm run build -w server",
+    "start": "npm run start -w server",
+    "test": "npm run test -w server && npm run test -w web",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
+    "demo:build": "tsx scripts/build-demo-repos.ts",
+    "demo:capture-logs": "tsx scripts/capture-ci-logs.ts",
+    "test:e2e": "playwright test",
+    "demo:export-replays": "tsx scripts/export-replays.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3"
+  }
+}

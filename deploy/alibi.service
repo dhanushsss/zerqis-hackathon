@@ -1,0 +1,19 @@
+[Unit]
+Description=Alibi CI failure forensics
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+User=alibi
+Group=alibi
+WorkingDirectory=/opt/alibi
+EnvironmentFile=/opt/alibi/.env
+ExecStart=/usr/bin/node server/dist/index.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

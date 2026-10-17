@@ -1,0 +1,44 @@
+{
+  "id": "code-regression",
+  "title": "Discount boundary regression in pricing-engine",
+  "summary": "A refactor of discount tiers broke the $100.00 threshold.",
+  "repository": "alibi-demo/pricing-engine",
+  "framework": "jest",
+  "branch": "main",
+  "workflow": "CI",
+  "job": "test (node 20)",
+  "ciCommand": [
+    "npx",
+    "jest",
+    "--ci"
+  ],
+  "commits": [
+    {
+      "dir": "01-base",
+      "message": "feat: volume discounts and state sales tax",
+      "author": "Lena Hoffmann <lena@example.dev>",
+      "date": "2026-10-10T13:20:00Z"
+    },
+    {
+      "dir": "02-refactor",
+      "message": "refactor: table-driven discount tiers and frozen tax rates",
+      "author": "Marco Silva <marco@example.dev>",
+      "date": "2026-10-15T16:42:00Z"
+    }
+  ],
+  "expected": {
+    "classification": "code_regression",
+    "failingTest": {
+      "file": "test/discounts.test.js",
+      "name": "discountRate applies 10% at exactly the $100.00 threshold"
+    },
+    "experiments": [
+      "reproduce",
+      "repeat",
+      "compare_parent",
+      "validate_patch"
+    ],
+    "remediation": "code_patch",
+    "notes": "Fails deterministically on the refactor commit (two boundary tests: exactly $100.00 and exactly $250.00) and passes on its parent. The comparison operator changed from >= to >."
+  }
+}
